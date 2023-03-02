@@ -1,5 +1,6 @@
-use chess::board::Board;
+use chess::game::Game;
 
 fn main() {
-    println!("{:?}", Board::default());
+    let game = Game::default();
+    println!("{:?}", game);
 }

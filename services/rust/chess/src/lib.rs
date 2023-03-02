@@ -1,12 +1,11 @@
+#![allow(incomplete_features)]
 #![feature(
     const_trait_impl,
     iter_intersperse,
     const_mut_refs,
     derive_const,
-    const_default_impls
+    const_default_impls,
+    adt_const_params
 )]
 
-#[macro_use]
-mod bitboard;
-pub mod board;
-mod moves;
+pub mod game;

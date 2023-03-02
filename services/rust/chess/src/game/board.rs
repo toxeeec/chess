@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::bitboard::Bitboard;
+use super::{bitboard::Bitboard, piece::Piece};
 
 pub struct Board {
     pub pieces: [Bitboard; 12],
@@ -8,6 +8,24 @@ pub struct Board {
     pub white: Bitboard,
     pub black: Bitboard,
     pub occ: Bitboard,
+}
+
+impl Board {
+    pub const fn get<const PIECE: Piece>(&self, white: bool) -> Bitboard {
+        self.pieces[PIECE as usize * white as usize]
+    }
+
+    pub const fn empty(&self) -> Bitboard {
+        !self.occ
+    }
+
+    pub const fn enemy(&self, white: bool) -> Bitboard {
+        if white {
+            self.black
+        } else {
+            self.white
+        }
+    }
 }
 
 impl Default for Board {
@@ -31,7 +49,7 @@ impl Default for Board {
         let occ = white | black;
 
         Self {
-            pieces: [wp, wr, wn, wb, wq, wk, bp, br, bn, bb, bq, bk],
+            pieces: [bp, br, bn, bb, bq, bk, wp, wr, wn, wb, wq, wk],
             white,
             black,
             occ,
@@ -41,11 +59,11 @@ impl Default for Board {
 
 impl Debug for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        const PIECES: [char; 12] = ['P', 'R', 'N', 'B', 'Q', 'K', 'p', 'r', 'n', 'b', 'q', 'k'];
+        const PIECES: [char; 12] = ['p', 'r', 'n', 'b', 'q', 'k', 'P', 'R', 'N', 'B', 'Q', 'K'];
         let mut squares = ['.'; 64];
         for (i, sq) in squares.iter_mut().enumerate() {
             for (j, bb) in self.pieces.iter().enumerate() {
-                if bb.contains(i) {
+                if bb.contains(i as u32) {
                     *sq = PIECES[j];
                 }
             }
