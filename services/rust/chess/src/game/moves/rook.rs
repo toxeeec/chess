@@ -1,20 +1,20 @@
 use super::{pins::Pins, Move};
 use crate::game::{
     board::Board,
-    moves::{magics::bishop_moves, Type},
+    moves::{magics::rook_moves, Type},
     piece::Piece,
     state::State,
 };
 use bitboard::{for_each, Bitboard};
 
-pub fn bishop(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
-    let mut bb = board.get::<{ Piece::Bishop }>(state.white) & !pins.hv;
+pub fn rook(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
+    let mut bb = board.get::<{ Piece::Rook }>(state.white) & !pins.diag;
     let enemy = board.enemy(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
-        let mut moves = bishop_moves(from, board.occ) & checkmask;
-        if pins.diag.contains(from) {
-            moves &= pins.diag;
+        let mut moves = rook_moves(from, board.occ) & checkmask;
+        if pins.hv.contains(from) {
+            moves &= pins.hv;
         }
         for_each!(moves, to, {
             let typ = if enemy.contains(to) {

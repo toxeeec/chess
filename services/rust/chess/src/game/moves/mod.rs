@@ -3,6 +3,7 @@ mod king;
 mod knight;
 mod magics;
 mod pins;
+mod rook;
 
 #[repr(u32)]
 pub enum Type {

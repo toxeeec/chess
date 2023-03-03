@@ -1,6 +1,5 @@
-use std::fmt::Debug;
-
 use self::board::Board;
+use std::fmt::Debug;
 
 mod board;
 mod moves;

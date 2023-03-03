@@ -1,7 +1,6 @@
-use bitboard::{bb, for_each, shift::Direction, Bitboard};
-
 use super::{pins::Pins, Move};
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
+use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 pub fn king(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, banned: Bitboard) {
     let from = board.get::<{ Piece::King }>(state.white).lsb();
