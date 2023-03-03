@@ -3,6 +3,7 @@ mod king;
 mod knight;
 mod magics;
 mod pins;
+mod queen;
 mod rook;
 
 #[repr(u32)]

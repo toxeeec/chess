@@ -8,7 +8,18 @@ use crate::game::{
 use bitboard::{for_each, Bitboard};
 
 pub fn rook(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
-    let mut bb = board.get::<{ Piece::Rook }>(state.white) & !pins.diag;
+    let bb = board.get::<{ Piece::Rook }>(state.white) & !pins.diag;
+    inner(bb, board, state, list, pins, checkmask);
+}
+
+pub(crate) fn inner(
+    mut bb: Bitboard,
+    board: &Board,
+    state: State,
+    list: &mut Vec<Move>,
+    pins: &Pins,
+    checkmask: Bitboard,
+) {
     let enemy = board.enemy(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
