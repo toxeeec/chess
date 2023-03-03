@@ -1,4 +1,9 @@
 [workspace]
 members = [
-	"chess"
+	"chess",
+	"chess/bitboard",
+	"chess/magics"
 ]
+
+[profile.dev]
+opt-level = 3

@@ -4,4 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitboard = {path = "./bitboard"}
+magics = { path = "./magics" }
 test-case = "3.0.0"
+
+[build-dependencies]
+magics = { path = "./magics" }
+quote = "1.0.23"

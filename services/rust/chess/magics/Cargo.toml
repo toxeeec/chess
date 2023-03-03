@@ -1,0 +1,9 @@
+[package]
+name = "magics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitboard = {path = "../bitboard"}
+quote = "1.0.23"
+test-case = "3.0.0"

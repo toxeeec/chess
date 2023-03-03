@@ -1,11 +1,7 @@
+use bitboard::{for_each, shift::Direction, Bitboard};
+
 use super::{pins::Pins, Move};
-use crate::game::{
-    bitboard::{self, shift::Direction, Bitboard},
-    board::Board,
-    moves,
-    piece::Piece,
-    state::State,
-};
+use crate::game::{board::Board, moves, piece::Piece, state::State};
 
 pub const KNIGHT_LOOKUP: [Bitboard; 64] = {
     let mut bbs = [Bitboard::default(); 64];
@@ -47,6 +43,7 @@ fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkm
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitboard::bb;
     use test_case::test_case;
 
     #[test_case(0 => bb![10, 17])]

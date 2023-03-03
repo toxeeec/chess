@@ -2,8 +2,6 @@ use std::fmt::Debug;
 
 use self::board::Board;
 
-#[macro_use]
-mod bitboard;
 mod board;
 mod moves;
 mod piece;

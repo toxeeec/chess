@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
-use super::{bitboard::Bitboard, piece::Piece};
+use bitboard::{bb, Bitboard};
+
+use super::piece::Piece;
 
 pub struct Board {
     pub pieces: [Bitboard; 12],

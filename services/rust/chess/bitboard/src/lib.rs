@@ -1,9 +1,19 @@
+#![allow(incomplete_features)]
+#![feature(
+    const_trait_impl,
+    const_mut_refs,
+    derive_const,
+    const_default_impls,
+    adt_const_params
+)]
+
 mod bits;
+use quote::{quote, ToTokens};
 pub mod shift;
 
 #[derive_const(Default, PartialEq)]
 #[derive(Debug, Eq, Clone, Copy)]
-pub struct Bitboard(pub(crate) u64);
+pub struct Bitboard(pub u64);
 
 impl Bitboard {
     pub const fn is_empty(self) -> bool {
@@ -30,16 +40,26 @@ impl Bitboard {
         }
         bb
     }
+
+    pub const fn rank(sq: u32) -> Bitboard {
+        debug_assert!(sq < 64);
+        RANK_1 << (8 * (sq / 8))
+    }
+
+    pub const fn file(sq: u32) -> Bitboard {
+        debug_assert!(sq < 64);
+        FILE_A << (sq % 8)
+    }
 }
 
 #[macro_export]
 macro_rules! bb {
     ($sq: expr) => {
-        $crate::game::bitboard::Bitboard::from_square($sq)
+        $crate::Bitboard::from_square($sq)
     };
 
     ($($sq: expr),* $(,)?) => {
-        $crate::game::bitboard::Bitboard::from_squares([$($sq,)*])
+        $crate::Bitboard::from_squares([$($sq,)*])
     };
 }
 
@@ -53,11 +73,22 @@ macro_rules! for_each {
         }
     };
 }
+pub const RANK_1: Bitboard = bb![0, 1, 2, 3, 4, 5, 6, 7];
+pub const RANK_8: Bitboard = RANK_1 << (8 * 7);
 
 pub const FILE_A: Bitboard = bb![0, 8, 16, 24, 32, 40, 48, 56];
 pub const FILE_B: Bitboard = FILE_A << 1;
 pub const FILE_G: Bitboard = FILE_A << 6;
 pub const FILE_H: Bitboard = FILE_A << 7;
+
+impl ToTokens for Bitboard {
+    fn to_tokens(&self, tokens: &mut quote::__private::TokenStream) {
+        let n = self.0;
+        tokens.extend(quote! {
+            Bitboard(#n)
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -81,5 +112,17 @@ mod tests {
     #[test_case([0, 1, 2, 3, 4, 5, 6, 7] => Bitboard(0b11111111))]
     fn from_squares_tests<const N: usize>(sqs: [u32; N]) -> Bitboard {
         Bitboard::from_squares(sqs)
+    }
+
+    #[test_case(0 => bb![0, 1, 2, 3, 4, 5, 6, 7])]
+    #[test_case(63 => bb![56, 57, 58, 59, 60, 61, 62, 63])]
+    fn rank_tests(sq: u32) -> Bitboard {
+        Bitboard::rank(sq)
+    }
+
+    #[test_case(0 => bb![0, 8, 16, 24, 32, 40, 48, 56])]
+    #[test_case(63 => bb![7, 15, 23, 31, 39, 47, 55, 63])]
+    fn file_tests(sq: u32) -> Bitboard {
+        Bitboard::file(sq)
     }
 }

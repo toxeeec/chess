@@ -1,4 +1,4 @@
-use crate::game::bitboard::Bitboard;
+use bitboard::Bitboard;
 
 #[derive(Debug)]
 pub struct Pins {
