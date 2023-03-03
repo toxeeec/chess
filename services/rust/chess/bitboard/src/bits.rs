@@ -1,6 +1,5 @@
-use std::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
-
 use super::Bitboard;
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
 
 impl const BitAnd for Bitboard {
     type Output = Self;
@@ -9,16 +8,22 @@ impl const BitAnd for Bitboard {
     }
 }
 
-impl const BitOrAssign for Bitboard {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
+impl const BitAndAssign for Bitboard {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
     }
 }
 
 impl const BitOr for Bitboard {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
-        Bitboard(self.0 | rhs.0)
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl const BitOrAssign for Bitboard {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
     }
 }
 

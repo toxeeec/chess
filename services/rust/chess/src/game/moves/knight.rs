@@ -1,7 +1,7 @@
 use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 use super::{pins::Pins, Move};
-use crate::game::{board::Board, moves, piece::Piece, state::State};
+use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
 
 pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
     let mut bb = board.get::<{ Piece::Knight }>(state.white) & !(pins.hv | pins.diag);
@@ -11,9 +11,9 @@ pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, ch
         let mut moves = KNIGHT_LOOKUP[from as usize] & board.empty() & checkmask;
         for_each!(moves, to, {
             let typ = if enemy.contains(to) {
-                moves::Type::Capture
+                Type::Capture
             } else {
-                moves::Type::Quiet
+                Type::Quiet
             };
             let m = Move::new(from, to, typ);
             list.push(m);

@@ -1,10 +1,8 @@
-use bitboard::Bitboard;
-use magics::Magic;
+mod bishop;
 mod king;
 mod knight;
+mod magics;
 mod pins;
-
-include!(concat!(env!("OUT_DIR"), "/magics.rs"));
 
 #[repr(u32)]
 pub enum Type {

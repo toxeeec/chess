@@ -11,7 +11,7 @@ use std::cmp::max;
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Magic {
-    pub mask: Bitboard,
+    pub mask: u64,
     pub magic: u64,
     pub shift: u32,
     pub attacks_index: usize,
@@ -82,22 +82,22 @@ const fn attacks_bb<const IS_ROOK: bool>(sq: u32, occ: Bitboard) -> Bitboard {
     attacks
 }
 
-const fn relevant_occupancies<const IS_ROOK: bool>() -> [Bitboard; 64] {
-    let mut occ = [Bitboard::default(); 64];
+const fn relevant_occupancies<const IS_ROOK: bool>() -> [u64; 64] {
+    let mut occ = [0; 64];
     let mut sq = 0;
     while sq < 64 {
         let edges =
             ((RANK_1 | RANK_8) & !Bitboard::rank(sq)) | ((FILE_A | FILE_H) & !Bitboard::file(sq));
-        occ[sq as usize] = attacks_bb::<IS_ROOK>(sq, Bitboard::default()) & !edges;
+        occ[sq as usize] = (attacks_bb::<IS_ROOK>(sq, Bitboard::default()) & !edges).0;
         sq += 1;
     }
     occ
 }
 
-const ROOK_RELEVANT_OCCUPANCIES: [Bitboard; 64] = relevant_occupancies::<true>();
-const BISHOP_RELEVANT_OCCUPANCIES: [Bitboard; 64] = relevant_occupancies::<false>();
+const ROOK_RELEVANT_OCCUPANCIES: [u64; 64] = relevant_occupancies::<true>();
+const BISHOP_RELEVANT_OCCUPANCIES: [u64; 64] = relevant_occupancies::<false>();
 
-fn magics<const N: usize>(relevant_occupancies: [Bitboard; 64]) -> ([Magic; 64], [Bitboard; N]) {
+fn magics<const N: usize>(relevant_occupancies: [u64; 64]) -> ([Magic; 64], [Bitboard; N]) {
     const SEEDS: [u64; 8] = [728, 10316, 55013, 32803, 12281, 15100, 16645, 255];
     let mut magics = [Magic::default(); 64];
     let mut occs = [Bitboard::default(); 4096];
@@ -105,15 +105,15 @@ fn magics<const N: usize>(relevant_occupancies: [Bitboard; 64]) -> ([Magic; 64],
     let mut attacks = [Bitboard::default(); N];
     let mut attacks_index = 0;
 
-    for (sq, mask) in relevant_occupancies.iter().enumerate() {
-        let shift = mask.0.count_ones();
+    for (sq, mask) in relevant_occupancies.into_iter().enumerate() {
+        let shift = mask.count_ones();
         let mut size = 0;
         let mut bb = 0;
         loop {
             occs[size] = Bitboard(bb);
             reference[size] = attacks_bb::<true>(sq as u32, occs[size]);
             size += 1;
-            bb = bb.wrapping_sub(mask.0) & mask.0;
+            bb = bb.wrapping_sub(mask) & mask;
             if bb == 0 {
                 break;
             }
@@ -140,7 +140,7 @@ fn magics<const N: usize>(relevant_occupancies: [Bitboard; 64]) -> ([Magic; 64],
             }
         }
         magics[sq] = Magic {
-            mask: *mask,
+            mask,
             magic,
             shift,
             attacks_index,
@@ -179,15 +179,15 @@ mod tests {
         attacks_bb::<false>(sq, occ)
     }
 
-    #[test_case(0 => bb![1, 2, 3, 4, 5, 6, 8, 16, 24, 32, 40, 48])]
-    #[test_case(9 => bb![10, 11, 12, 13, 14, 17, 25, 33, 41, 49])]
-    fn rook_relevant_occupancies_tests(sq: usize) -> Bitboard {
+    #[test_case(0 => bb![1, 2, 3, 4, 5, 6, 8, 16, 24, 32, 40, 48].0)]
+    #[test_case(9 => bb![10, 11, 12, 13, 14, 17, 25, 33, 41, 49].0)]
+    fn rook_relevant_occupancies_tests(sq: usize) -> u64 {
         ROOK_RELEVANT_OCCUPANCIES[sq]
     }
 
-    #[test_case(0 => bb![9, 18, 27, 36, 45, 54])]
-    #[test_case(9 => bb![18, 27, 36, 45, 54])]
-    fn bishop_relevant_occupancies_tests(sq: usize) -> Bitboard {
+    #[test_case(0 => bb![9, 18, 27, 36, 45, 54].0)]
+    #[test_case(9 => bb![18, 27, 36, 45, 54].0)]
+    fn bishop_relevant_occupancies_tests(sq: usize) -> u64 {
         BISHOP_RELEVANT_OCCUPANCIES[sq]
     }
 }
