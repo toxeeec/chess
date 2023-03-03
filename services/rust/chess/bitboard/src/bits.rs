@@ -1,5 +1,5 @@
 use super::Bitboard;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, Not, Shl, Shr};
 
 impl const BitAnd for Bitboard {
     type Output = Self;
@@ -45,5 +45,12 @@ impl const Not for Bitboard {
     type Output = Self;
     fn not(self) -> Self::Output {
         Self(!self.0)
+    }
+}
+
+impl const BitXor for Bitboard {
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
     }
 }

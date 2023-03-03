@@ -28,6 +28,14 @@ impl Board {
             self.white
         }
     }
+
+    pub const fn own(&self, is_white: bool) -> Bitboard {
+        if is_white {
+            self.white
+        } else {
+            self.black
+        }
+    }
 }
 
 impl Default for Board {
@@ -81,3 +89,22 @@ impl Debug for Board {
         writeln!(f, "\n   A B C D E F G H")
     }
 }
+
+// 10000000
+// 01000000
+// 00100000
+// 00010000
+// 00001000
+// 00000101
+// 00000000
+// 00000101
+/*
+00000010
+00000010
+00000010
+00000010
+00000010
+00000010
+11111101
+00000010
+*/

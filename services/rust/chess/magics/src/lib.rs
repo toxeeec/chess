@@ -18,10 +18,10 @@ pub struct Magic {
 }
 
 pub fn rook_magics() -> ([Magic; 64], [bitboard::Bitboard; ROOK_ATTACKS]) {
-    magics(ROOK_RELEVANT_OCCUPANCIES)
+    magics(ROOK_RELEVANT_OCCUPANCIES, attacks_bb::<true>)
 }
 pub fn bishop_magics() -> ([Magic; 64], [bitboard::Bitboard; BISHOP_ATTACKS]) {
-    magics(BISHOP_RELEVANT_OCCUPANCIES)
+    magics(BISHOP_RELEVANT_OCCUPANCIES, attacks_bb::<false>)
 }
 
 impl ToTokens for Magic {
@@ -97,7 +97,10 @@ const fn relevant_occupancies<const IS_ROOK: bool>() -> [u64; 64] {
 const ROOK_RELEVANT_OCCUPANCIES: [u64; 64] = relevant_occupancies::<true>();
 const BISHOP_RELEVANT_OCCUPANCIES: [u64; 64] = relevant_occupancies::<false>();
 
-fn magics<const N: usize>(relevant_occupancies: [u64; 64]) -> ([Magic; 64], [Bitboard; N]) {
+fn magics<const N: usize>(
+    relevant_occupancies: [u64; 64],
+    attacks_bb: fn(u32, Bitboard) -> Bitboard,
+) -> ([Magic; 64], [Bitboard; N]) {
     const SEEDS: [u64; 8] = [728, 10316, 55013, 32803, 12281, 15100, 16645, 255];
     let mut magics = [Magic::default(); 64];
     let mut occs = [Bitboard::default(); 4096];
@@ -111,7 +114,7 @@ fn magics<const N: usize>(relevant_occupancies: [u64; 64]) -> ([Magic; 64], [Bit
         let mut bb = 0;
         loop {
             occs[size] = Bitboard(bb);
-            reference[size] = attacks_bb::<true>(sq as u32, occs[size]);
+            reference[size] = attacks_bb(sq as u32, occs[size]);
             size += 1;
             bb = bb.wrapping_sub(mask) & mask;
             if bb == 0 {

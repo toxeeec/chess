@@ -16,14 +16,14 @@ fn main() {
         pub static BISHOP_MAGICS: [Magic; 64] = [#(#bishop_magics),*];
         pub static BISHOP_ATTACKS: [Bitboard; #bishop_attacks_len] = [#(#bishop_attacks),*];
     };
-    let tokens = quote! {
+    let magics_tokens = quote! {
         #rook_tokens
         #bishop_tokens
     };
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("magics.rs");
-    fs::write(&dest_path, tokens.to_string()).unwrap();
-    Command::new("rustfmt").arg(&dest_path).output().unwrap();
+    let magics_path = Path::new(&out_dir).join("magics.rs");
+    fs::write(&magics_path, magics_tokens.to_string()).unwrap();
+    Command::new("rustfmt").arg(&magics_path).output().unwrap();
     println!("cargo:rerun-if-changed=build.rs");
 }

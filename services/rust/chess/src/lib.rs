@@ -5,7 +5,7 @@
     const_mut_refs,
     derive_const,
     const_default_impls,
-    adt_const_params
+    adt_const_params,
+    const_cmp
 )]
-
 pub mod game;

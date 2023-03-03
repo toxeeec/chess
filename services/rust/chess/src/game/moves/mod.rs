@@ -38,11 +38,8 @@ impl Move {
 pub fn generate(list: &mut Vec<Move>, board: &Board, state: State, ep_square: u32) {
     let enemy_king_sq = board.get::<{ Piece::King }>(!state.white).lsb();
     let banned = KING_LOOKUP[enemy_king_sq as usize];
-    // TODO: pins, checkmask
-    let pins = &Pins {
-        hv: Bitboard::default(),
-        diag: Bitboard::default(),
-    };
+    // TODO: checkmask
+    let pins = &Pins::new(state.white, board);
     king(board, state, list, pins, banned);
     let checkmask = Bitboard::default();
     if checkmask.is_empty() {
