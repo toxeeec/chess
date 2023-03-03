@@ -21,7 +21,7 @@ pub fn king(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, bann
     queen_castle(board, state, list, pins, banned);
 }
 
-const KING_LOOKUP: [Bitboard; 64] = {
+pub(crate) const KING_LOOKUP: [Bitboard; 64] = {
     let mut bbs = [Bitboard::default(); 64];
     let mut i = 0;
     while i < 64 {
