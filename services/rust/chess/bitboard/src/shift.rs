@@ -1,27 +1,69 @@
+use std::cmp::{max, min};
+
 use super::{Bitboard, FILE_A, FILE_B, FILE_G, FILE_H};
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
-    North,
-    East,
-    South,
-    West,
-    NorthEast,
-    SouthEast,
-    SouthWest,
-    NorthWest,
-    Nne,
-    Nee,
-    See,
-    Sse,
-    Ssw,
-    Sww,
-    Nww,
-    Nnw,
+    North = 8,
+    East = 1,
+    South = -8,
+    West = -1,
+    NorthEast = 9,
+    NorthWest = 7,
+    SouthEast = -7,
+    SouthWest = -9,
+    Nne = 17,
+    Nee = 10,
+    See = -6,
+    Sse = -15,
+    Ssw = -17,
+    Sww = -10,
+    Nww = 6,
+    Nnw = 15,
+}
+
+impl Direction {
+    pub const fn toward(sq1: u32, sq2: u32) -> Option<Self> {
+        let diff = max(sq1, sq2) - min(sq1, sq2);
+        if diff == 0 {
+            None
+        } else if file_of(sq1) == file_of(sq2) {
+            Some(Direction::North)
+        } else if rank_of(sq1) == rank_of(sq2) {
+            Some(Direction::East)
+        } else if diff % 7 == 0 {
+            Some(Direction::NorthWest)
+        } else if diff % 9 == 0 {
+            Some(Direction::NorthEast)
+        } else {
+            None
+        }
+    }
+
+    pub const fn opposite(self) -> Self {
+        match self {
+            Direction::North => Direction::South,
+            Direction::South => Direction::North,
+            Direction::East => Direction::West,
+            Direction::West => Direction::East,
+            Direction::NorthEast => Direction::SouthWest,
+            Direction::SouthEast => Direction::NorthWest,
+            Direction::NorthWest => Direction::SouthEast,
+            Direction::SouthWest => Direction::NorthEast,
+            Direction::Nne => Direction::Ssw,
+            Direction::Nee => Direction::Sww,
+            Direction::See => Direction::Nww,
+            Direction::Sse => Direction::Nnw,
+            Direction::Ssw => Direction::Nne,
+            Direction::Sww => Direction::Nee,
+            Direction::Nww => Direction::See,
+            Direction::Nnw => Direction::Sse,
+        }
+    }
 }
 
 impl Bitboard {
-    pub const fn shifted<const DIR: Direction>(self) -> Bitboard {
+    pub const fn shifted<const DIR: Direction>(self) -> Self {
         match DIR {
             Direction::North => self << 8,
             Direction::South => self >> 8,
@@ -41,6 +83,67 @@ impl Bitboard {
             Direction::Nnw => (self & !FILE_A) << 15,
         }
     }
+
+    pub const fn shifted_by(self, dir: Direction) -> Self {
+        match dir {
+            Direction::North => self.shifted::<{ Direction::North }>(),
+            Direction::South => self.shifted::<{ Direction::South }>(),
+            Direction::East => self.shifted::<{ Direction::East }>(),
+            Direction::West => self.shifted::<{ Direction::West }>(),
+            Direction::NorthEast => self.shifted::<{ Direction::NorthEast }>(),
+            Direction::SouthEast => self.shifted::<{ Direction::SouthEast }>(),
+            Direction::NorthWest => self.shifted::<{ Direction::NorthWest }>(),
+            Direction::SouthWest => self.shifted::<{ Direction::SouthWest }>(),
+            Direction::Nne => self.shifted::<{ Direction::Nne }>(),
+            Direction::Nee => self.shifted::<{ Direction::Nee }>(),
+            Direction::See => self.shifted::<{ Direction::See }>(),
+            Direction::Sse => self.shifted::<{ Direction::Sse }>(),
+            Direction::Ssw => self.shifted::<{ Direction::Ssw }>(),
+            Direction::Sww => self.shifted::<{ Direction::Sww }>(),
+            Direction::Nww => self.shifted::<{ Direction::Nww }>(),
+            Direction::Nnw => self.shifted::<{ Direction::Nnw }>(),
+        }
+    }
+
+    pub const fn shifted_forward_left(self, is_white: bool) -> Self {
+        if is_white {
+            self.shifted::<{ Direction::NorthWest }>()
+        } else {
+            self.shifted::<{ Direction::SouthEast }>()
+        }
+    }
+
+    pub const fn shifted_forward_right(self, is_white: bool) -> Self {
+        if is_white {
+            self.shifted::<{ Direction::NorthEast }>()
+        } else {
+            self.shifted::<{ Direction::SouthWest }>()
+        }
+    }
+
+    pub const fn shifted_backward_left(self, is_white: bool) -> Self {
+        if is_white {
+            self.shifted::<{ Direction::SouthEast }>()
+        } else {
+            self.shifted::<{ Direction::NorthWest }>()
+        }
+    }
+
+    pub const fn shifted_backward_right(self, is_white: bool) -> Self {
+        if is_white {
+            self.shifted::<{ Direction::SouthWest }>()
+        } else {
+            self.shifted::<{ Direction::NorthEast }>()
+        }
+    }
+}
+
+const fn rank_of(sq: u32) -> u32 {
+    sq / 8
+}
+
+const fn file_of(sq: u32) -> u32 {
+    sq % 8
 }
 
 #[cfg(test)]

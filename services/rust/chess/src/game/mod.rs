@@ -1,14 +1,15 @@
-use self::board::Board;
+use self::{board::Board, state::State};
 use std::fmt::Debug;
 
 mod board;
-mod moves;
+pub mod moves;
 mod piece;
 mod state;
 
 #[derive(Default)]
 pub struct Game {
-    board: Board,
+    pub board: Board,
+    pub state: State,
 }
 
 impl Debug for Game {

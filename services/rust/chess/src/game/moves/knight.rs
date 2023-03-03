@@ -5,10 +5,11 @@ use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
 
 pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
     let mut bb = board.get::<{ Piece::Knight }>(state.white) & !(pins.hv | pins.diag);
+    let empty = board.empty();
     let enemy = board.enemy(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
-        let mut moves = KNIGHT_LOOKUP[from as usize] & board.empty() & checkmask;
+        let mut moves = KNIGHT_LOOKUP[from as usize] & empty & checkmask;
         for_each!(moves, to, {
             let typ = if enemy.contains(to) {
                 Type::Capture
@@ -21,7 +22,7 @@ pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, ch
     });
 }
 
-const KNIGHT_LOOKUP: [Bitboard; 64] = {
+pub(crate) const KNIGHT_LOOKUP: [Bitboard; 64] = {
     let mut bbs = [Bitboard::default(); 64];
     let mut i = 0;
     while i < 64 {

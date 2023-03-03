@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 bitboard = {path = "./bitboard"}
 magics = { path = "./magics" }
+num = "0.4.0"
+num-derive = "0.3.3"
+num-traits = "0.2.15"
 rand = "0.8.5"
 test-case = "3.0.0"
 

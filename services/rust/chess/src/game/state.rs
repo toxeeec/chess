@@ -5,7 +5,7 @@ pub struct State {
     pub wq: bool,
     pub bk: bool,
     pub bq: bool,
-    pub ep: bool,
+    pub ep: Option<u32>,
 }
 
 impl Default for State {
@@ -16,7 +16,7 @@ impl Default for State {
             wq: true,
             bk: true,
             bq: true,
-            ep: false,
+            ep: None,
         }
     }
 }

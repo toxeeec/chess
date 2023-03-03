@@ -3,8 +3,7 @@ use crate::game::{
     moves::magics::{bishop_moves, rook_moves},
     piece::Piece,
 };
-use bitboard::{bb, for_each, Bitboard};
-use std::cmp::{max, min};
+use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 #[derive(Debug)]
 pub struct Pins {
@@ -13,10 +12,10 @@ pub struct Pins {
 }
 
 impl Pins {
-    pub fn new(is_white: bool, board: &Board) -> Pins {
+    pub fn new(is_white: bool, board: &Board) -> Self {
         let hv = hv_pins(is_white, board);
         let diag = diag_pins(is_white, board);
-        Pins { hv, diag }
+        Self { hv, diag }
     }
 }
 
@@ -57,40 +56,26 @@ fn diag_pins(is_white: bool, board: &Board) -> Bitboard {
     pins
 }
 
-static CHECK_PATH: [[Bitboard; 64]; 64] = {
+pub(crate) static CHECK_PATH: [[Bitboard; 64]; 64] = {
     let mut bbs = [[Bitboard::default(); 64]; 64];
     let mut king_sq = 0;
     while king_sq < 64 {
         let mut enemy_sq = 0;
         while enemy_sq < 64 {
-            let diff = max(king_sq, enemy_sq) - min(king_sq, enemy_sq);
-            let dir = if diff == 0 {
-                enemy_sq += 1;
-                continue;
-            } else if king_sq % 8 == enemy_sq % 8 {
-                8
-            } else if king_sq / 8 == enemy_sq / 8 {
-                1
-            } else if diff % 7 == 0 {
-                7
-            } else if diff % 9 == 0 {
-                9
-            } else {
-                enemy_sq += 1;
-                continue;
-            };
-
-            let mut sq = king_sq;
-            let mut bb = Bitboard::default();
-            while sq != enemy_sq {
-                if king_sq < enemy_sq {
-                    sq += dir;
-                } else {
-                    sq -= dir;
+            let dir = Direction::toward(king_sq, enemy_sq);
+            if let Some(dir) = dir {
+                let mut sq = king_sq;
+                let mut bb = Bitboard::default();
+                while sq != enemy_sq {
+                    if king_sq < enemy_sq {
+                        sq += dir as u32;
+                    } else {
+                        sq -= dir as u32;
+                    }
+                    bb |= bb![sq];
                 }
-                bb |= bb![sq];
+                bbs[king_sq as usize][enemy_sq as usize] = bb;
             }
-            bbs[king_sq as usize][enemy_sq as usize] = bb;
             enemy_sq += 1;
         }
         king_sq += 1;

@@ -14,7 +14,7 @@ pub struct Board {
 
 impl Board {
     pub const fn get<const PIECE: Piece>(&self, is_white: bool) -> Bitboard {
-        self.pieces[PIECE as usize * is_white as usize]
+        self.pieces[6 * is_white as usize + PIECE as usize]
     }
 
     pub const fn empty(&self) -> Bitboard {
@@ -89,22 +89,3 @@ impl Debug for Board {
         writeln!(f, "\n   A B C D E F G H")
     }
 }
-
-// 10000000
-// 01000000
-// 00100000
-// 00010000
-// 00001000
-// 00000101
-// 00000000
-// 00000101
-/*
-00000010
-00000010
-00000010
-00000010
-00000010
-00000010
-11111101
-00000010
-*/

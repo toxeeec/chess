@@ -4,15 +4,18 @@
     const_mut_refs,
     derive_const,
     const_default_impls,
-    adt_const_params
+    adt_const_params,
+    const_cmp
 )]
 
 mod bits;
+use std::fmt::Debug;
+
 use quote::{quote, ToTokens};
 pub mod shift;
 
 #[derive_const(Default, PartialEq)]
-#[derive(Debug, Eq, Clone, Copy)]
+#[derive(Eq, Clone, Copy)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
@@ -41,12 +44,12 @@ impl Bitboard {
         bb
     }
 
-    pub const fn rank(sq: u32) -> Bitboard {
+    pub const fn rank(sq: u32) -> Self {
         debug_assert!(sq < 64);
         RANK_1 << (8 * (sq / 8))
     }
 
-    pub const fn file(sq: u32) -> Bitboard {
+    pub const fn file(sq: u32) -> Self {
         debug_assert!(sq < 64);
         FILE_A << (sq % 8)
     }
@@ -85,6 +88,21 @@ pub const FILE_A: Bitboard = bb![0, 8, 16, 24, 32, 40, 48, 56];
 pub const FILE_B: Bitboard = FILE_A << 1;
 pub const FILE_G: Bitboard = FILE_A << 6;
 pub const FILE_H: Bitboard = FILE_A << 7;
+
+impl Debug for Bitboard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let bb = Self(self.0.reverse_bits());
+        for i in 0..8 {
+            let rank = format!("{:08b}", bb.0 >> (i * 8) & 0b11111111)
+                .split_terminator("")
+                .skip(1)
+                .collect::<Vec<_>>()
+                .join(" ");
+            writeln!(f, "{rank}")?;
+        }
+        Ok(())
+    }
+}
 
 impl ToTokens for Bitboard {
     fn to_tokens(&self, tokens: &mut quote::__private::TokenStream) {
