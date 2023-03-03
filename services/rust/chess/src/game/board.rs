@@ -13,16 +13,16 @@ pub struct Board {
 }
 
 impl Board {
-    pub const fn get<const PIECE: Piece>(&self, white: bool) -> Bitboard {
-        self.pieces[PIECE as usize * white as usize]
+    pub const fn get<const PIECE: Piece>(&self, is_white: bool) -> Bitboard {
+        self.pieces[PIECE as usize * is_white as usize]
     }
 
     pub const fn empty(&self) -> Bitboard {
         !self.occ
     }
 
-    pub const fn enemy(&self, white: bool) -> Bitboard {
-        if white {
+    pub const fn enemy(&self, is_white: bool) -> Bitboard {
+        if is_white {
             self.black
         } else {
             self.white

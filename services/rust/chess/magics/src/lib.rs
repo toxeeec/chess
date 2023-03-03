@@ -4,7 +4,7 @@
 
 mod prng;
 
-use bitboard::{Bitboard, FILE_A, FILE_H, RANK_1, RANK_8};
+use bitboard::{bb, Bitboard, FILE_A, FILE_H, RANK_1, RANK_8};
 use prng::Prng;
 use quote::{quote, ToTokens, TokenStreamExt};
 use std::cmp::max;
@@ -70,7 +70,7 @@ const fn attacks_bb<const IS_ROOK: bool>(sq: u32, occ: Bitboard) -> Bitboard {
         let dir = dirs[i] as u32;
         let mut next = sq.wrapping_add(dir);
         while next < 64 && DISTANCES[next as usize][next.wrapping_sub(dir) as usize] == 1 {
-            let bb = Bitboard::from_square(next);
+            let bb = bb![next];
             attacks |= bb;
             if occ.contains(next) {
                 break;

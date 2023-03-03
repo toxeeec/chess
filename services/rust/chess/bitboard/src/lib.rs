@@ -50,6 +50,11 @@ impl Bitboard {
         debug_assert!(sq < 64);
         FILE_A << (sq % 8)
     }
+
+    pub const fn lsb(self) -> u32 {
+        debug_assert!(!self.is_empty());
+        self.0.trailing_zeros()
+    }
 }
 
 #[macro_export]
@@ -124,5 +129,12 @@ mod tests {
     #[test_case(63 => bb![7, 15, 23, 31, 39, 47, 55, 63])]
     fn file_tests(sq: u32) -> Bitboard {
         Bitboard::file(sq)
+    }
+
+    #[test_case(bb![0] => 0)]
+    #[test_case(bb![63] => 63)]
+    #[test_case(bb![5, 10, 15] => 5)]
+    fn lsb_tests(bb: Bitboard) -> u32 {
+        bb.lsb()
     }
 }

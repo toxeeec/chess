@@ -24,7 +24,6 @@ impl const BitOr for Bitboard {
 
 impl const Shl<u32> for Bitboard {
     type Output = Self;
-    #[inline(always)]
     fn shl(self, rhs: u32) -> Self::Output {
         Self(self.0 << rhs)
     }
@@ -32,7 +31,6 @@ impl const Shl<u32> for Bitboard {
 
 impl const Shr<u32> for Bitboard {
     type Output = Self;
-    #[inline(always)]
     fn shr(self, rhs: u32) -> Self::Output {
         Self(self.0 >> rhs)
     }
@@ -40,7 +38,6 @@ impl const Shr<u32> for Bitboard {
 
 impl const Not for Bitboard {
     type Output = Self;
-    #[inline(always)]
     fn not(self) -> Self::Output {
         Self(!self.0)
     }
