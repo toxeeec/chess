@@ -4,6 +4,7 @@ use bishop::bishop;
 use king::king;
 use knight::knight;
 use num_derive::FromPrimitive;
+use pawn::pawn;
 use queen::queen;
 use rook::rook;
 use std::fmt::Debug;
@@ -13,16 +14,27 @@ mod checkmask;
 mod king;
 mod knight;
 mod magics;
+mod pawn;
 mod pins;
 mod queen;
 mod rook;
 
 #[derive(Debug, FromPrimitive)]
 pub enum Type {
-    Quiet = 0,
-    KingCastle = 1,
-    QueenCastle = 2,
-    Capture = 3,
+    Quiet,
+    DoublePush,
+    KingCastle,
+    QueenCastle,
+    Capture,
+    EnPassant,
+    KnightPromotion = 8,
+    BishopPromotion,
+    RookPromotion,
+    QueenPromotion,
+    KnightPromotionCapture,
+    BishopPromotionCapture,
+    RookPromotionCapture,
+    QueenPromotionCapture,
 }
 
 // From   | To     | Type
@@ -33,7 +45,7 @@ pub struct Move(u16);
 
 impl Move {
     fn new(from: u32, to: u32, typ: Type) -> Self {
-        Self(((from as u16) << 6) | ((to as u16) << 4) | (typ as u16))
+        Self(((from as u16) << 10) | ((to as u16) << 4) | (typ as u16))
     }
 
     fn from(self) -> u16 {
@@ -71,7 +83,7 @@ pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) {
         return;
     }
 
-    // TODO: pawn moves
+    pawn(board, state, list, pins, checkmask);
     rook(board, state, list, pins, checkmask);
     knight(board, state, list, pins, checkmask);
     bishop(board, state, list, pins, checkmask);

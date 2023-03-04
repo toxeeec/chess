@@ -5,7 +5,8 @@
     derive_const,
     const_default_impls,
     adt_const_params,
-    const_cmp
+    const_cmp,
+    iter_intersperse
 )]
 
 mod bits;
@@ -82,6 +83,10 @@ macro_rules! for_each {
     };
 }
 pub const RANK_1: Bitboard = bb![0, 1, 2, 3, 4, 5, 6, 7];
+pub const RANK_2: Bitboard = RANK_1 << 8;
+pub const RANK_3: Bitboard = RANK_1 << (8 * 2);
+pub const RANK_6: Bitboard = RANK_1 << (8 * 5);
+pub const RANK_7: Bitboard = RANK_1 << (8 * 6);
 pub const RANK_8: Bitboard = RANK_1 << (8 * 7);
 
 pub const FILE_A: Bitboard = bb![0, 8, 16, 24, 32, 40, 48, 56];
@@ -91,14 +96,14 @@ pub const FILE_H: Bitboard = FILE_A << 7;
 
 impl Debug for Bitboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let bb = Self(self.0.reverse_bits());
-        for i in 0..8 {
-            let rank = format!("{:08b}", bb.0 >> (i * 8) & 0b11111111)
-                .split_terminator("")
-                .skip(1)
-                .collect::<Vec<_>>()
-                .join(" ");
-            writeln!(f, "{rank}")?;
+        let bb = self.0.reverse_bits();
+        for row in format!("{:064b}", bb)
+            .chars()
+            .collect::<Vec<_>>()
+            .chunks(8)
+            .rev()
+        {
+            writeln!(f, "{}", String::from_iter(row.iter().intersperse(&' ')))?;
         }
         Ok(())
     }

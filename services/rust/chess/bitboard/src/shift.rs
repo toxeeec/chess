@@ -62,6 +62,12 @@ impl Direction {
     }
 }
 
+impl From<Direction> for u32 {
+    fn from(val: Direction) -> Self {
+        val as u32
+    }
+}
+
 impl Bitboard {
     pub const fn shifted<const DIR: Direction>(self) -> Self {
         match DIR {
@@ -102,6 +108,14 @@ impl Bitboard {
             Direction::Sww => self.shifted::<{ Direction::Sww }>(),
             Direction::Nww => self.shifted::<{ Direction::Nww }>(),
             Direction::Nnw => self.shifted::<{ Direction::Nnw }>(),
+        }
+    }
+
+    pub const fn shifted_forward(self, is_white: bool) -> Self {
+        if is_white {
+            self.shifted::<{ Direction::North }>()
+        } else {
+            self.shifted::<{ Direction::South }>()
         }
     }
 

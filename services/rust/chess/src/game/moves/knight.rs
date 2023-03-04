@@ -1,7 +1,6 @@
-use bitboard::{bb, for_each, shift::Direction, Bitboard};
-
 use super::{pins::Pins, Move};
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
+use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
     let mut bb = board.get::<{ Piece::Knight }>(state.white) & !(pins.hv | pins.diag);

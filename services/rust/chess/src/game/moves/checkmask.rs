@@ -1,5 +1,3 @@
-use bitboard::{bb, for_each, shift::Direction, Bitboard};
-
 use crate::game::{
     board::Board,
     moves::{
@@ -9,6 +7,7 @@ use crate::game::{
     },
     piece::Piece,
 };
+use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 static SQUARE_BEHIND: [[Bitboard; 64]; 64] = {
     let mut bbs = [[Bitboard::default(); 64]; 64];
