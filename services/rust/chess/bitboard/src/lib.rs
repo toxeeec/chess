@@ -59,6 +59,16 @@ impl Bitboard {
         debug_assert!(!self.is_empty());
         self.0.trailing_zeros()
     }
+
+    pub const fn clear(&mut self, sq: u32) {
+        debug_assert!(sq < 64);
+        *self &= !bb![sq]
+    }
+
+    pub const fn set(&mut self, sq: u32) {
+        debug_assert!(sq < 64);
+        *self |= bb![sq]
+    }
 }
 
 #[macro_export]
@@ -97,6 +107,7 @@ pub const FILE_H: Bitboard = FILE_A << 7;
 impl Debug for Bitboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let bb = self.0.reverse_bits();
+        writeln!(f)?;
         for row in format!("{:064b}", bb)
             .chars()
             .collect::<Vec<_>>()

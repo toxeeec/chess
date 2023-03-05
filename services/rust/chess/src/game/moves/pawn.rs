@@ -24,6 +24,7 @@ const fn third_rank(is_white: bool) -> Bitboard {
 }
 
 const fn from<T: ~const Into<u32>>(is_white: bool, to: u32, dir: T) -> u32 {
+    debug_assert!(to < 64);
     if is_white {
         to - dir.into()
     } else {

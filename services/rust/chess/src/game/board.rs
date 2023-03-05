@@ -1,9 +1,14 @@
+use enum_iterator::all;
 use std::fmt::Debug;
 
-use bitboard::{bb, Bitboard};
+use bitboard::{bb, shift::Direction, Bitboard};
 
-use super::piece::Piece;
+use super::{
+    moves::{Move, Type},
+    piece::Piece,
+};
 
+#[derive(Clone, Copy)]
 pub struct Board {
     pub pieces: [Bitboard; 12],
 
@@ -15,6 +20,10 @@ pub struct Board {
 impl Board {
     pub const fn get<const PIECE: Piece>(&self, is_white: bool) -> Bitboard {
         self.pieces[6 * is_white as usize + PIECE as usize]
+    }
+
+    pub const fn get_mut(&mut self, piece: Piece, is_white: bool) -> &mut Bitboard {
+        &mut self.pieces[6 * is_white as usize + piece as usize]
     }
 
     pub const fn empty(&self) -> Bitboard {
@@ -35,6 +44,75 @@ impl Board {
         } else {
             self.black
         }
+    }
+
+    fn piece_at(&self, sq: u32) -> Piece {
+        debug_assert!(sq < 64);
+        for (i, bb) in self.pieces.into_iter().enumerate() {
+            if bb.contains(sq) {
+                return num::FromPrimitive::from_usize(i % 6).unwrap();
+            }
+        }
+        unreachable!("No piece at given square");
+    }
+
+    fn clear(&mut self, sq: u32, is_white: bool) {
+        debug_assert!(sq < 64);
+        for piece in all::<Piece>() {
+            self.get_mut(piece, is_white).clear(sq);
+        }
+    }
+
+    pub fn update(&mut self, mov: Move, is_white: bool) {
+        let from = mov.from();
+        let mut to = mov.to();
+        let typ = mov.typ();
+        let piece = match typ {
+            Type::Quiet | Type::Capture => self.piece_at(from),
+            Type::KingCastle | Type::QueenCastle => Piece::King,
+            _ => Piece::Pawn,
+        };
+
+        match typ.promotion_piece() {
+            Some(promotion_piece) => {
+                self.get_mut(Piece::Pawn, is_white).clear(from);
+                self.get_mut(promotion_piece, is_white).set(to);
+            }
+            None => {
+                *self.get_mut(piece, is_white) ^= bb![from, to];
+            }
+        };
+
+        if typ.is_capture() {
+            if typ == Type::EnPassant {
+                let dir = if is_white {
+                    Direction::South
+                } else {
+                    Direction::North
+                };
+                to = dir.shift(to)
+            }
+            self.clear(to, !is_white);
+        }
+
+        if typ == Type::KingCastle {
+            let mov = if is_white { bb![5, 7] } else { bb![61, 63] };
+            *self.get_mut(Piece::Rook, is_white) ^= mov;
+        } else if typ == Type::QueenCastle {
+            let mov = if is_white { bb![0, 3] } else { bb![56, 59] };
+            *self.get_mut(Piece::Rook, is_white) ^= mov;
+        }
+
+        self.white = Bitboard::default();
+        self.black = Bitboard::default();
+        for (i, bb) in self.pieces.into_iter().enumerate() {
+            if i < 6 {
+                self.black |= bb
+            } else {
+                self.white |= bb
+            }
+        }
+        self.occ = self.black | self.white
     }
 }
 

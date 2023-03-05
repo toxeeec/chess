@@ -37,7 +37,7 @@ static PIN_PATH: [[Bitboard; 64]; 64] = {
         let mut j = 0;
         while j < 64 {
             bbs[i][j] |= SQUARE_BEHIND[i][j];
-            bbs[i][j] &= bb![j as u32];
+            bbs[i][j] &= !bb![j as u32];
             j += 1
         }
         i += 1;
@@ -62,7 +62,6 @@ fn pawn_check(
     *king_ban |= left_pawns | right_pawns;
     if left_pawns.contains(king_sq) {
         *mask = bb![king_sq].shifted_forward_left(is_white);
-        return;
     } else if right_pawns.contains(king_sq) {
         *mask = bb![king_sq].shifted_forward_right(is_white);
     }

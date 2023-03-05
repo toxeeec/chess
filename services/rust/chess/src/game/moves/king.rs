@@ -1,8 +1,8 @@
-use super::{pins::Pins, Move};
+use super::Move;
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
 use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
-pub fn king(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, banned: Bitboard) {
+pub fn king(board: &Board, state: State, list: &mut Vec<Move>, banned: Bitboard) {
     let from = board.get::<{ Piece::King }>(state.white).lsb();
     let enemy = board.enemy(state.white);
     let mut moves = KING_LOOKUP[from as usize] & board.empty() & !banned;
@@ -17,8 +17,8 @@ pub fn king(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, bann
         list.push(m);
     });
 
-    king_castle(board, state, list, pins, banned);
-    queen_castle(board, state, list, pins, banned);
+    king_castle(board, state, banned, list);
+    queen_castle(board, state, banned, list);
 }
 
 pub(crate) const KING_LOOKUP: [Bitboard; 64] = {
@@ -83,7 +83,7 @@ fn can_queen_castle(is_white: bool, board: &Board, banned: Bitboard) -> bool {
     }
 }
 
-fn king_castle(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, banned: Bitboard) {
+fn king_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Move>) {
     if (state.white && !state.wk) || (!state.white && !state.bk) {
         return;
     }
@@ -95,7 +95,7 @@ fn king_castle(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, b
     list.push(Move::new(from, to, Type::KingCastle));
 }
 
-fn queen_castle(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, banned: Bitboard) {
+fn queen_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Move>) {
     if (state.white && !state.wq) || (!state.white && !state.bq) {
         return;
     }

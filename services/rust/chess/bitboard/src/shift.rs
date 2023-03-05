@@ -24,6 +24,8 @@ pub enum Direction {
 
 impl Direction {
     pub const fn toward(sq1: u32, sq2: u32) -> Option<Self> {
+        debug_assert!(sq1 < 64);
+        debug_assert!(sq2 < 64);
         let diff = max(sq1, sq2) - min(sq1, sq2);
         if diff == 0 {
             None
@@ -59,6 +61,13 @@ impl Direction {
             Direction::Nww => Direction::See,
             Direction::Nnw => Direction::Sse,
         }
+    }
+
+    pub const fn shift(self, mut sq: u32) -> u32 {
+        debug_assert!(sq < 64);
+        sq = sq.wrapping_add(self as u32);
+        debug_assert!(sq < 64);
+        sq
     }
 }
 
