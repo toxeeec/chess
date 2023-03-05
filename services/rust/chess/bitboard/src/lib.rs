@@ -9,11 +9,11 @@
     iter_intersperse
 )]
 
-mod bits;
-use std::fmt::Debug;
-
 use quote::{quote, ToTokens};
+use std::fmt::Debug;
+mod bits;
 pub mod shift;
+pub mod square;
 
 #[derive_const(Default, PartialEq)]
 #[derive(Eq, Clone, Copy)]

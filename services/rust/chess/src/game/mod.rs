@@ -2,11 +2,12 @@ use self::{board::Board, moves::Move, state::State};
 use std::fmt::Debug;
 
 mod board;
+mod fen;
 pub mod moves;
 mod piece;
 mod state;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Game {
     pub board: Board,
     pub state: State,

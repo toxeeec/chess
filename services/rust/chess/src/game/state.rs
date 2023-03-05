@@ -1,15 +1,15 @@
-use bitboard::shift::Direction;
+use bitboard::{shift::Direction, square::Square};
 
 use super::moves::{Move, Type};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
     pub white: bool,
     pub wk: bool,
     pub wq: bool,
     pub bk: bool,
     pub bq: bool,
-    pub ep: Option<u32>,
+    pub ep: Option<Square>,
 }
 
 impl State {
@@ -22,7 +22,7 @@ impl State {
                 } else {
                     Direction::North
                 };
-                self.ep = Some(dir.shift(mov.to()));
+                self.ep = Some(Square::new(mov.to()).shifted_by(dir));
             }
             Type::KingCastle => {
                 if self.white {

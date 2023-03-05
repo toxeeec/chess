@@ -125,12 +125,12 @@ pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, chec
 
     // TODO: refactor
     if let Some(ep_sq) = state.ep {
-        let ep_bb = bb![ep_sq];
+        let ep_bb: Bitboard = ep_sq.into();
         let mut bb = (ep_bb.shifted_backward_left(state.white)
             | ep_bb.shifted_backward_right(state.white))
             & not_hv_pinned;
 
-        let ep_pawn = from(state.white, ep_sq, Direction::North);
+        let ep_pawn = from(state.white, ep_sq.0, Direction::North);
         let mut from;
         for_each!(bb, from, {
             let mut queen_or_rook = board.get::<{ Piece::Queen }>(!state.white)
@@ -147,9 +147,9 @@ pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, chec
             });
 
             let is_pinned = pins.diag.contains(from);
-            let is_ep_square_pinned = pins.diag.contains(ep_sq);
+            let is_ep_square_pinned = pins.diag.contains(ep_sq.0);
             if !is_pinned || is_ep_square_pinned {
-                list.push(Move::new(from, ep_sq, Type::EnPassant));
+                list.push(Move::new(from, ep_sq.0, Type::EnPassant));
             }
         });
     }

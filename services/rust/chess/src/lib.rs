@@ -6,7 +6,8 @@
     derive_const,
     const_default_impls,
     adt_const_params,
-    const_cmp
+    const_cmp,
+    exclusive_range_pattern
 )]
 
 pub mod game;
