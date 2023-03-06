@@ -9,6 +9,8 @@ use crate::game::{
 };
 use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
+use super::king::KING_LOOKUP;
+
 static SQUARE_BEHIND: [[Bitboard; 64]; 64] = {
     let mut bbs = [[Bitboard::default(); 64]; 64];
     let mut king_sq = 0;
@@ -124,15 +126,17 @@ fn rook_check(
     });
 }
 
-pub fn checkmask(is_white: bool, board: &Board, banned: &mut Bitboard) -> Bitboard {
+pub fn checkmask_or_banned(is_white: bool, board: &Board) -> (Bitboard, Bitboard) {
+    let enemy_king_sq = board.get::<{ Piece::King }>(!is_white).lsb();
+    let mut banned = KING_LOOKUP[enemy_king_sq as usize];
     let king_sq = board.get::<{ Piece::King }>(is_white).lsb();
-    let mut mask = !Bitboard::default();
-    pawn_check(is_white, &mut mask, board, king_sq, banned);
-    knight_check(is_white, &mut mask, board, king_sq, banned);
+    let mut checkmask = !Bitboard::default();
+    pawn_check(is_white, &mut checkmask, board, king_sq, &mut banned);
+    knight_check(is_white, &mut checkmask, board, king_sq, &mut banned);
     // queen check is computed in both bishop and rook checks
-    bishop_check(is_white, &mut mask, board, king_sq, banned);
-    rook_check(is_white, &mut mask, board, king_sq, banned);
-    mask
+    bishop_check(is_white, &mut checkmask, board, king_sq, &mut banned);
+    rook_check(is_white, &mut checkmask, board, king_sq, &mut banned);
+    (checkmask, banned)
 }
 
 #[cfg(test)]

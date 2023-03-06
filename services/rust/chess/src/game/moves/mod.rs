@@ -1,13 +1,14 @@
-use self::{checkmask::checkmask, king::KING_LOOKUP, pins::Pins};
+use self::{checkmask::checkmask_or_banned, pins::Pins};
 use super::{board::Board, piece::Piece, state::State};
 use bishop::bishop;
+use bitboard::square::Square;
 use king::king;
 use knight::knight;
 use num_derive::FromPrimitive;
 use pawn::pawn;
 use queen::queen;
 use rook::rook;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 mod bishop;
 mod checkmask;
@@ -82,6 +83,20 @@ impl Move {
     }
 }
 
+impl Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}{}",
+            Square::new(self.from()),
+            Square::new(self.to()),
+            self.typ()
+                .promotion_piece()
+                .map_or(String::new(), |p| p.to_string())
+        )
+    }
+}
+
 impl Debug for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -95,15 +110,13 @@ impl Debug for Move {
 }
 
 pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) {
-    let enemy_king_sq = board.get::<{ Piece::King }>(!state.white).lsb();
-    let mut banned = KING_LOOKUP[enemy_king_sq as usize];
-    let pins = &Pins::new(state.white, board);
+    let (checkmask, banned) = checkmask_or_banned(state.white, board);
     king(board, state, list, banned);
-    let checkmask = checkmask(state.white, board, &mut banned);
     if checkmask.is_empty() {
         return;
     }
 
+    let pins = &Pins::new(state.white, board);
     pawn(board, state, list, pins, checkmask);
     rook(board, state, list, pins, checkmask);
     knight(board, state, list, pins, checkmask);

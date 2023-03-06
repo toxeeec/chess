@@ -27,14 +27,32 @@ impl Game {
     }
 
     #[cfg(test)]
-    fn perft(self, depth: u32) -> u32 {
+    pub fn perft(self, depth: u32) -> u32 {
         let mut nodes = 0;
         self.perft_inner(depth, &mut nodes);
         nodes
     }
 
-    #[cfg(test)]
+    #[cfg(debug_assertions)]
+    pub fn divide(self, depth: u32) {
+        let mut total = 0;
+        for mov in &self.moves {
+            let mut g = self.clone();
+            let mut nodes = 0;
+            g.make_move(*mov);
+            g.perft_inner(depth - 1, &mut nodes);
+            total += nodes;
+            println!("{}: {}", mov, nodes);
+        }
+        println!("Nodes: {}", total);
+    }
+
+    #[cfg(any(test, debug_assertions))]
     fn perft_inner(self, depth: u32, nodes: &mut u32) {
+        if depth == 0 {
+            *nodes += 1;
+            return;
+        }
         if depth == 1 {
             *nodes += self.moves.len() as u32;
             return;
@@ -63,7 +81,13 @@ impl Default for Game {
 
 impl Debug for Game {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.board, f)
+        writeln!(f, "{:?}", self.board)?;
+        writeln!(f, "{:?}", self.state)?;
+        writeln!(f)?;
+        for m in &self.moves {
+            writeln!(f, "{:?}", m)?;
+        }
+        Ok(())
     }
 }
 
@@ -72,8 +96,12 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test]
-    fn perft_tests() {
-        assert_eq!(Game::default().perft(2), 400);
+    #[test_case(Game::default(), 5 => 4865609; "startpost depth 5")]
+    #[test_case("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -".parse().unwrap(), 5 => 193690690; "kiwi depth 5")]
+    #[test_case("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ -".parse().unwrap(), 5 => 89941194; "promotion depth 5")]
+    #[test_case("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -".parse().unwrap(), 5 => 674624; "pin depth 5")]
+    #[test_case("8/8/8/kq1pP1K1/8/8/8/8 w - d6 0 1".parse().unwrap(), 1 => 9; "illegal ep")]
+    fn perft_tests(game: Game, depth: u32) -> u32 {
+        game.perft(depth)
     }
 }

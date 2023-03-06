@@ -20,11 +20,11 @@ pub(crate) fn inner(
     pins: &Pins,
     checkmask: Bitboard,
 ) {
-    let empty = board.empty();
     let enemy = board.enemy(state.white);
+    let enemy_or_empty = board.enemy_or_empty(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
-        let mut moves = rook_moves(from, board.occ) & empty & checkmask;
+        let mut moves = rook_moves(from, board.occ) & enemy_or_empty & checkmask;
         if pins.hv.contains(from) {
             moves &= pins.hv;
         }

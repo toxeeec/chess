@@ -18,16 +18,21 @@ pub struct Board {
 }
 
 impl Board {
+    pub fn empty() -> Self {
+        Self {
+            pieces: Default::default(),
+            white: Bitboard::default(),
+            black: Bitboard::default(),
+            occ: Bitboard::default(),
+        }
+    }
+
     pub const fn get<const PIECE: Piece>(&self, is_white: bool) -> Bitboard {
         self.pieces[6 * is_white as usize + PIECE as usize]
     }
 
     pub const fn get_mut(&mut self, piece: Piece, is_white: bool) -> &mut Bitboard {
         &mut self.pieces[6 * is_white as usize + piece as usize]
-    }
-
-    pub const fn empty(&self) -> Bitboard {
-        !self.occ
     }
 
     pub const fn enemy(&self, is_white: bool) -> Bitboard {
@@ -46,6 +51,10 @@ impl Board {
         }
     }
 
+    pub const fn enemy_or_empty(&self, is_white: bool) -> Bitboard {
+        self.enemy(is_white) | !self.occ
+    }
+
     fn piece_at(&self, sq: u32) -> Piece {
         debug_assert!(sq < 64);
         for (i, bb) in self.pieces.into_iter().enumerate() {
@@ -61,6 +70,24 @@ impl Board {
         for piece in all::<Piece>() {
             self.get_mut(piece, is_white).clear(sq);
         }
+    }
+
+    pub fn set_white(&mut self) {
+        self.white = Bitboard::default();
+        for bb in self.pieces.into_iter().skip(6) {
+            self.white |= bb;
+        }
+    }
+
+    pub fn set_black(&mut self) {
+        self.black = Bitboard::default();
+        for bb in self.pieces.into_iter().take(6) {
+            self.black |= bb;
+        }
+    }
+
+    pub fn set_occ(&mut self) {
+        self.occ = self.white | self.black;
     }
 
     pub fn update(&mut self, mov: Move, is_white: bool) {
@@ -103,16 +130,9 @@ impl Board {
             *self.get_mut(Piece::Rook, is_white) ^= mov;
         }
 
-        self.white = Bitboard::default();
-        self.black = Bitboard::default();
-        for (i, bb) in self.pieces.into_iter().enumerate() {
-            if i < 6 {
-                self.black |= bb
-            } else {
-                self.white |= bb
-            }
-        }
-        self.occ = self.black | self.white
+        self.set_white();
+        self.set_black();
+        self.set_occ();
     }
 }
 

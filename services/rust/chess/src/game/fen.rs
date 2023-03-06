@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum ParseGameError {
     #[error("fen must contain at least 4 fields")]
     Format,
+    #[error("invalid piece placement field")]
+    PiecePlacement(#[from] ParseBoardError),
     #[error("invalid state")]
     State(#[from] ParseStateError),
     #[error("invalid en passant target square")]
@@ -21,8 +23,8 @@ impl FromStr for Game {
         if fields.len() < 4 {
             return Err(ParseGameError::Format);
         }
-        let board = Board::default();
-        let state: State = fields[1..4].try_into()?;
+        let board = fields[0].parse()?;
+        let state = fields[1..4].try_into()?;
         let mut moves = Vec::with_capacity(32);
         moves::generate(&mut moves, &board, state);
         Ok(Game {
@@ -42,7 +44,7 @@ pub enum ParseBoardError {
 impl FromStr for Board {
     type Err = ParseBoardError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut board = Board::default();
+        let mut board = Board::empty();
         let mut sq = 56;
         for c in s.chars() {
             match c.try_into() {
@@ -58,6 +60,9 @@ impl FromStr for Board {
                 },
             };
         }
+        board.set_white();
+        board.set_black();
+        board.set_occ();
         Ok(board)
     }
 }
@@ -114,7 +119,7 @@ impl TryFrom<&[&str]> for State {
         let ep = value[2];
         if ep != "-" {
             let ep = value[2].parse::<Square>()?;
-            let rank = ep.rank_of();
+            let rank = ep.rank_of() + 1;
             if rank != 3 && rank != 6 {
                 return Err(ParseStateError::EnPassant(rank));
             }

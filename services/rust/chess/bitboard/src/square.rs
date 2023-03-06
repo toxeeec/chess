@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
 use crate::{bb, shift::Direction, Bitboard};
@@ -20,6 +20,10 @@ impl Square {
     pub const fn new(sq: u32) -> Self {
         debug_assert!(sq < 64);
         Self(sq)
+    }
+
+    pub const fn file_of(self) -> u32 {
+        self.0 % 8
     }
 
     pub const fn rank_of(self) -> u32 {
@@ -48,7 +52,7 @@ impl FromStr for Square {
         if rank > 7 {
             return Err(ParseSquareError::Rank(bytes[1] as char));
         }
-        Ok(Self((file * 8 + rank) as u32))
+        Ok(Self((rank * 8 + file) as u32))
     }
 }
 
@@ -58,12 +62,24 @@ impl From<Square> for Bitboard {
     }
 }
 
+impl Display for Square {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            (b'a' + self.file_of() as u8) as char,
+            (b'1' + self.rank_of() as u8) as char
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use test_case::test_case;
 
     #[test_case("a1" => Ok(Square(0)))]
+    #[test_case("e4" => Ok(Square(28)))]
     #[test_case("h8" => Ok(Square(63)))]
     #[test_case("abc" => Err(ParseSquareError::Format))]
     #[test_case("a9" => Err(ParseSquareError::Rank('9')))]

@@ -5,7 +5,8 @@ use bitboard::{bb, for_each, shift::Direction, Bitboard};
 pub fn king(board: &Board, state: State, list: &mut Vec<Move>, banned: Bitboard) {
     let from = board.get::<{ Piece::King }>(state.white).lsb();
     let enemy = board.enemy(state.white);
-    let mut moves = KING_LOOKUP[from as usize] & board.empty() & !banned;
+    let enemy_or_empty = board.enemy_or_empty(state.white);
+    let mut moves = KING_LOOKUP[from as usize] & enemy_or_empty & !banned;
     let mut to;
     for_each!(moves, to, {
         let typ = if enemy.contains(to) {

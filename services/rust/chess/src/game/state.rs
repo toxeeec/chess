@@ -24,21 +24,39 @@ impl State {
                 };
                 self.ep = Some(Square::new(mov.to()).shifted_by(dir));
             }
-            Type::KingCastle => {
+            Type::KingCastle | Type::QueenCastle => {
                 if self.white {
-                    self.wk = false
+                    self.wk = false;
+                    self.wq = false;
                 } else {
-                    self.bk = false
+                    self.bk = false;
+                    self.bq = false;
                 }
             }
-            Type::QueenCastle => {
+            _ => {
+                let from = mov.from();
                 if self.white {
-                    self.wq = false
+                    match from {
+                        4 => {
+                            self.wk = false;
+                            self.wq = false;
+                        }
+                        0 => self.wq = false,
+                        7 => self.wk = false,
+                        _ => (),
+                    }
                 } else {
-                    self.bq = false
+                    match from {
+                        60 => {
+                            self.bk = false;
+                            self.bq = false;
+                        }
+                        56 => self.bq = false,
+                        63 => self.bk = false,
+                        _ => (),
+                    }
                 }
             }
-            _ => (),
         }
         self.white = !self.white;
     }

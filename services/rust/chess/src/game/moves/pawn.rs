@@ -91,7 +91,7 @@ fn promotion_captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, lis
 #[inline(always)]
 pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
     let bb = board.get::<{ Piece::Pawn }>(state.white);
-    let empty = board.empty();
+    let empty = !board.occ;
     let not_diag_pinned = bb & !pins.diag;
 
     let pinned = not_diag_pinned.shifted_forward(state.white) & pins.hv;
@@ -138,7 +138,7 @@ pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, chec
             let king_bb = board.get::<{ Piece::King }>(state.white);
 
             // https://lichess.org/editor/8/8/8/kq1pP1K1/8/8/8/8_w_-_d6_0_1
-            let occ = board.occ & bb![from, ep_pawn];
+            let occ = board.occ & !bb![from, ep_pawn];
             let mut qr_sq;
             for_each!(queen_or_rook, qr_sq, {
                 if rook_moves(qr_sq, occ) & king_bb != Bitboard::default() {

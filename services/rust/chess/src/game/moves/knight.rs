@@ -4,11 +4,11 @@ use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
 pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
     let mut bb = board.get::<{ Piece::Knight }>(state.white) & !(pins.hv | pins.diag);
-    let empty = board.empty();
     let enemy = board.enemy(state.white);
+    let enemy_or_empty = board.enemy_or_empty(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
-        let mut moves = KNIGHT_LOOKUP[from as usize] & empty & checkmask;
+        let mut moves = KNIGHT_LOOKUP[from as usize] & enemy_or_empty & checkmask;
         for_each!(moves, to, {
             let typ = if enemy.contains(to) {
                 Type::Capture
