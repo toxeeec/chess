@@ -1,7 +1,7 @@
 use enum_iterator::all;
 use std::fmt::Debug;
 
-use bitboard::{bb, shift::Direction, Bitboard};
+use bitboard::{bb, shift::Direction, square::Square, Bitboard};
 
 use super::{
     moves::{Move, Type},
@@ -55,8 +55,7 @@ impl Board {
         self.enemy(is_white) | !self.occ
     }
 
-    fn piece_at(&self, sq: u32) -> Piece {
-        debug_assert!(sq < 64);
+    fn piece_at(&self, sq: Square) -> Piece {
         for (i, bb) in self.pieces.into_iter().enumerate() {
             if bb.contains(sq) {
                 return num::FromPrimitive::from_usize(i % 6).unwrap();
@@ -65,8 +64,7 @@ impl Board {
         unreachable!("No piece at given square");
     }
 
-    fn clear(&mut self, sq: u32, is_white: bool) {
-        debug_assert!(sq < 64);
+    fn clear(&mut self, sq: Square, is_white: bool) {
         for piece in all::<Piece>() {
             self.get_mut(piece, is_white).clear(sq);
         }
@@ -106,7 +104,7 @@ impl Board {
                 self.get_mut(promotion_piece, is_white).set(to);
             }
             None => {
-                *self.get_mut(piece, is_white) ^= bb![from, to];
+                *self.get_mut(piece, is_white) ^= bb![from.0, to.0];
             }
         };
 
@@ -117,7 +115,7 @@ impl Board {
                 } else {
                     Direction::North
                 };
-                to = dir.shift(to)
+                to = to.shifted_by(dir).unwrap()
             }
             self.clear(to, !is_white);
         }
@@ -171,7 +169,7 @@ impl Debug for Board {
         let mut squares = ['.'; 64];
         for (i, sq) in squares.iter_mut().enumerate() {
             for (j, bb) in self.pieces.iter().enumerate() {
-                if bb.contains(i as u32) {
+                if bb.contains((i as u32).into()) {
                     *sq = PIECES[j];
                 }
             }

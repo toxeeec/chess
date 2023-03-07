@@ -1,12 +1,20 @@
 use super::Move;
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
-use bitboard::{bb, for_each, shift::Direction, Bitboard};
+use bitboard::{
+    bb, for_each,
+    shift::Direction,
+    square::{
+        BLACK_KING_KING_CASTLE_SQ, BLACK_KING_QUEEN_CASTLE_SQ, BLACK_KING_SQ,
+        WHITE_KING_KING_CASTLE_SQ, WHITE_KING_QUEEN_CASTLE_SQ, WHITE_KING_SQ,
+    },
+    Bitboard,
+};
 
 pub fn king(board: &Board, state: State, list: &mut Vec<Move>, banned: Bitboard) {
     let from = board.get::<{ Piece::King }>(state.white).lsb();
     let enemy = board.enemy(state.white);
     let enemy_or_empty = board.enemy_or_empty(state.white);
-    let mut moves = KING_LOOKUP[from as usize] & enemy_or_empty & !banned;
+    let mut moves = KING_LOOKUP[from.0 as usize] & enemy_or_empty & !banned;
     let mut to;
     for_each!(moves, to, {
         let typ = if enemy.contains(to) {
@@ -91,8 +99,16 @@ fn king_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Mov
     if !can_king_castle(state.white, board, banned) {
         return;
     }
-    let from = if state.white { 4 } else { 60 };
-    let to = if state.white { 6 } else { 62 };
+    let from = if state.white {
+        WHITE_KING_SQ
+    } else {
+        BLACK_KING_SQ
+    };
+    let to = if state.white {
+        WHITE_KING_KING_CASTLE_SQ
+    } else {
+        BLACK_KING_KING_CASTLE_SQ
+    };
     list.push(Move::new(from, to, Type::KingCastle));
 }
 
@@ -103,8 +119,16 @@ fn queen_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Mo
     if !can_queen_castle(state.white, board, banned) {
         return;
     }
-    let from = if state.white { 4 } else { 60 };
-    let to = if state.white { 2 } else { 58 };
+    let from = if state.white {
+        WHITE_KING_SQ
+    } else {
+        BLACK_KING_SQ
+    };
+    let to = if state.white {
+        WHITE_KING_QUEEN_CASTLE_SQ
+    } else {
+        BLACK_KING_QUEEN_CASTLE_SQ
+    };
     list.push(Move::new(from, to, Type::QueenCastle));
 }
 

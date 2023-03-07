@@ -1,4 +1,4 @@
-use self::{checkmask::checkmask_or_banned, pins::Pins};
+use self::{checkmask::checkmask_and_banned, pins::Pins};
 use super::{board::Board, piece::Piece, state::State};
 use bishop::bishop;
 use bitboard::square::Square;
@@ -64,18 +64,16 @@ impl Type {
 pub struct Move(u16);
 
 impl Move {
-    pub fn new(from: u32, to: u32, typ: Type) -> Self {
-        debug_assert!(from < 64);
-        debug_assert!(to < 64);
-        Self(((from as u16) << 10) | ((to as u16) << 4) | (typ as u16))
+    pub fn new(from: Square, to: Square, typ: Type) -> Self {
+        Self(((from.0 as u16) << 10) | ((to.0 as u16) << 4) | (typ as u16))
     }
 
-    pub fn from(self) -> u32 {
-        (self.0 >> 10) as u32
+    pub fn from(self) -> Square {
+        (self.0 as u32 >> 10).into()
     }
 
-    pub fn to(self) -> u32 {
-        ((self.0 >> 4) & 0b111111) as u32
+    pub fn to(self) -> Square {
+        ((self.0 as u32 >> 4) & 0b111111).into()
     }
 
     pub fn typ(self) -> Type {
@@ -88,8 +86,8 @@ impl Display for Move {
         write!(
             f,
             "{}{}{}",
-            Square::new(self.from()),
-            Square::new(self.to()),
+            self.from(),
+            self.to(),
             self.typ()
                 .promotion_piece()
                 .map_or(String::new(), |p| p.to_string())
@@ -110,7 +108,7 @@ impl Debug for Move {
 }
 
 pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) {
-    let (checkmask, banned) = checkmask_or_banned(state.white, board);
+    let (checkmask, banned) = checkmask_and_banned(state.white, board);
     king(board, state, list, banned);
     if checkmask.is_empty() {
         return;

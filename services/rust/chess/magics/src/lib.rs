@@ -1,10 +1,20 @@
 // https://github.com/official-stockfish/Stockfish/blob/master/src/bitboard.cpp
 
-#![feature(const_cmp, const_trait_impl, const_mut_refs)]
+#![feature(
+    const_cmp,
+    const_trait_impl,
+    const_mut_refs,
+    let_chains,
+    const_for,
+    const_intoiterator_identity,
+    const_convert
+)]
 
 mod prng;
 
-use bitboard::{bb, Bitboard, FILE_A, FILE_H, RANK_1, RANK_8};
+use bitboard::{
+    shift::Direction, square::Square, squares::squares, Bitboard, FILE_A, FILE_H, RANK_1, RANK_8,
+};
 use prng::Prng;
 use quote::{quote, ToTokens, TokenStreamExt};
 use std::cmp::max;
@@ -43,39 +53,46 @@ impl ToTokens for Magic {
 
 const DISTANCES: [[u8; 64]; 64] = {
     let mut distances = [[0; 64]; 64];
-    let mut sq1: u8 = 0;
-    while sq1 < 64 {
-        let mut sq2: u8 = 0;
-        while sq2 < 64 {
-            let (sq1_rank, sq2_rank) = (sq1 / 8, sq2 / 8);
-            let (sq1_file, sq2_file) = (sq1 % 8, sq2 % 8);
-            distances[sq1 as usize][sq2 as usize] =
-                max(sq1_rank.abs_diff(sq2_rank), sq1_file.abs_diff(sq2_file));
-            sq2 += 1;
+    for sq1 in squares() {
+        for sq2 in squares() {
+            let (sq1_rank, sq2_rank) = (sq1.rank(), sq2.rank());
+            let (sq1_file, sq2_file) = (sq1.file(), sq2.file());
+            distances[sq1.0 as usize][sq2.0 as usize] =
+                max(sq1_rank.abs_diff(sq2_rank), sq1_file.abs_diff(sq2_file)) as u8;
         }
-        sq1 += 1;
     }
     distances
 };
 
-const fn attacks_bb<const IS_ROOK: bool>(sq: u32, occ: Bitboard) -> Bitboard {
-    let dirs: [isize; 4] = if IS_ROOK {
-        [8, 1, -8, -1]
+const fn attacks_bb<const IS_ROOK: bool>(sq: Square, occ: Bitboard) -> Bitboard {
+    let dirs: [Direction; 4] = if IS_ROOK {
+        [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ]
     } else {
-        [9, -7, -9, 7]
+        [
+            Direction::NorthEast,
+            Direction::SouthEast,
+            Direction::SouthWest,
+            Direction::NorthWest,
+        ]
     };
     let mut attacks = Bitboard::default();
     let mut i = 0;
     while i < 4 {
-        let dir = dirs[i] as u32;
-        let mut next = sq.wrapping_add(dir);
-        while next < 64 && DISTANCES[next as usize][next.wrapping_sub(dir) as usize] == 1 {
-            let bb = bb![next];
-            attacks |= bb;
-            if occ.contains(next) {
+        let dir = dirs[i];
+        let mut prev = sq;
+        let mut curr = sq.shifted_by(dir);
+        while let Some(curr_sq) = curr && DISTANCES[curr_sq.0 as usize][prev.0 as usize] == 1 {
+            attacks |= curr_sq.into();
+            if occ.contains(curr_sq) {
                 break;
             }
-            next = next.wrapping_add(dir);
+            prev = curr_sq;
+            curr = curr_sq.shifted_by(dir);
         }
         i += 1;
     }
@@ -84,12 +101,10 @@ const fn attacks_bb<const IS_ROOK: bool>(sq: u32, occ: Bitboard) -> Bitboard {
 
 const fn relevant_occupancies<const IS_ROOK: bool>() -> [u64; 64] {
     let mut occ = [0; 64];
-    let mut sq = 0;
-    while sq < 64 {
+    for sq in squares() {
         let edges =
             ((RANK_1 | RANK_8) & !Bitboard::rank(sq)) | ((FILE_A | FILE_H) & !Bitboard::file(sq));
-        occ[sq as usize] = (attacks_bb::<IS_ROOK>(sq, Bitboard::default()) & !edges).0;
-        sq += 1;
+        occ[sq.0 as usize] = (attacks_bb::<IS_ROOK>(sq, Bitboard::default()) & !edges).0;
     }
     occ
 }
@@ -99,7 +114,7 @@ const BISHOP_RELEVANT_OCCUPANCIES: [u64; 64] = relevant_occupancies::<false>();
 
 fn magics<const N: usize>(
     relevant_occupancies: [u64; 64],
-    attacks_bb: fn(u32, Bitboard) -> Bitboard,
+    attacks_bb: fn(Square, Bitboard) -> Bitboard,
 ) -> ([Magic; 64], [Bitboard; N]) {
     const SEEDS: [u64; 8] = [728, 10316, 55013, 32803, 12281, 15100, 16645, 255];
     let mut magics = [Magic::default(); 64];
@@ -114,7 +129,7 @@ fn magics<const N: usize>(
         let mut bb = 0;
         loop {
             occs[size] = Bitboard(bb);
-            reference[size] = attacks_bb(sq as u32, occs[size]);
+            reference[size] = attacks_bb((sq as u32).into(), occs[size]);
             size += 1;
             bb = bb.wrapping_sub(mask) & mask;
             if bb == 0 {
@@ -173,13 +188,13 @@ mod tests {
     #[test_case(0, Bitboard::default() => bb![1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56])]
     #[test_case(0, bb![1, 8] => bb![1, 8])]
     fn attacks_rook_tests(sq: u32, occ: Bitboard) -> Bitboard {
-        attacks_bb::<true>(sq, occ)
+        attacks_bb::<true>(sq.into(), occ)
     }
 
     #[test_case(0, Bitboard::default() => bb![9, 18, 27, 36, 45, 54, 63])]
     #[test_case(0, bb![9] => bb![9])]
     fn attacks_bishop_tests(sq: u32, occ: Bitboard) -> Bitboard {
-        attacks_bb::<false>(sq, occ)
+        attacks_bb::<false>(sq.into(), occ)
     }
 
     #[test_case(0 => bb![1, 2, 3, 4, 5, 6, 8, 16, 24, 32, 40, 48].0)]

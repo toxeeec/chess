@@ -50,7 +50,7 @@ impl FromStr for Board {
             match c.try_into() {
                 Ok(piece) => {
                     let is_white = c.is_uppercase();
-                    board.get_mut(piece, is_white).set(sq);
+                    board.get_mut(piece, is_white).set(sq.into());
                     sq += 1;
                 }
                 Err(err) => match c {
@@ -119,7 +119,7 @@ impl TryFrom<&[&str]> for State {
         let ep = value[2];
         if ep != "-" {
             let ep = value[2].parse::<Square>()?;
-            let rank = ep.rank_of() + 1;
+            let rank = ep.rank() + 1;
             if rank != 3 && rank != 6 {
                 return Err(ParseStateError::EnPassant(rank));
             }

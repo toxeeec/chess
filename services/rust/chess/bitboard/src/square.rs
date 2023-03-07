@@ -1,9 +1,10 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::Sub, str::FromStr};
 use thiserror::Error;
 
 use crate::{bb, shift::Direction, Bitboard};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive_const(PartialOrd, Ord, PartialEq)]
+#[derive(Debug, Eq, Clone, Copy)]
 pub struct Square(pub u32);
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -17,25 +18,34 @@ pub enum ParseSquareError {
 }
 
 impl Square {
-    pub const fn new(sq: u32) -> Self {
-        debug_assert!(sq < 64);
-        Self(sq)
-    }
-
-    pub const fn file_of(self) -> u32 {
+    pub const fn file(self) -> u32 {
         self.0 % 8
     }
 
-    pub const fn rank_of(self) -> u32 {
+    pub const fn rank(self) -> u32 {
         self.0 / 8
     }
 
-    pub const fn shifted_by(self, dir: Direction) -> Self {
+    pub const fn shifted_by(self, dir: Direction) -> Option<Self> {
         let sq = Self(self.0.wrapping_add(dir as u32));
-        debug_assert!(sq.0 < 64);
-        sq
+        if sq.0 < 64 {
+            Some(sq)
+        } else {
+            None
+        }
     }
 }
+
+pub const WHITE_KING_SQ: Square = 4.into();
+pub const BLACK_KING_SQ: Square = 60.into();
+pub const WHITE_LEFT_ROOK_SQ: Square = 0.into();
+pub const BLACK_LEFT_ROOK_SQ: Square = 56.into();
+pub const WHITE_RIGHT_ROOK_SQ: Square = 7.into();
+pub const BLACK_RIGHT_ROOK_SQ: Square = 63.into();
+pub const WHITE_KING_KING_CASTLE_SQ: Square = 6.into();
+pub const BLACK_KING_KING_CASTLE_SQ: Square = 62.into();
+pub const WHITE_KING_QUEEN_CASTLE_SQ: Square = 2.into();
+pub const BLACK_KING_QUEEN_CASTLE_SQ: Square = 58.into();
 
 impl FromStr for Square {
     type Err = ParseSquareError;
@@ -56,7 +66,21 @@ impl FromStr for Square {
     }
 }
 
-impl From<Square> for Bitboard {
+impl const Sub for Square {
+    type Output = u32;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.0 - rhs.0
+    }
+}
+
+impl const From<u32> for Square {
+    fn from(value: u32) -> Self {
+        debug_assert!(value < 64);
+        Self(value)
+    }
+}
+
+impl const From<Square> for Bitboard {
     fn from(value: Square) -> Self {
         bb![value.0]
     }
@@ -67,8 +91,8 @@ impl Display for Square {
         write!(
             f,
             "{}{}",
-            (b'a' + self.file_of() as u8) as char,
-            (b'1' + self.rank_of() as u8) as char
+            (b'a' + self.file() as u8) as char,
+            (b'1' + self.rank() as u8) as char
         )
     }
 }

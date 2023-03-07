@@ -3,7 +3,7 @@ use crate::game::{
     moves::magics::{bishop_moves, rook_moves},
     piece::Piece,
 };
-use bitboard::{bb, for_each, shift::Direction, Bitboard};
+use bitboard::{for_each, shift::Direction, squares::squares, Bitboard};
 
 #[derive(Debug)]
 pub struct Pins {
@@ -31,7 +31,7 @@ fn hv_pins(is_white: bool, board: &Board) -> Bitboard {
         let blockers = rook_moves(sq, own) & own;
         let pinned = rook_moves(sq, board.occ ^ blockers);
         if !(pinned & king_bb).is_empty() {
-            pins |= CHECK_PATH[king_sq as usize][sq as usize];
+            pins |= CHECK_PATH[king_sq.0 as usize][sq.0 as usize];
         };
     });
     pins
@@ -50,7 +50,7 @@ fn diag_pins(is_white: bool, board: &Board) -> Bitboard {
         let blockers = bishop_moves(sq, own) & own;
         let pinned = bishop_moves(sq, board.occ ^ blockers);
         if !(pinned & king_bb).is_empty() {
-            pins |= CHECK_PATH[king_sq as usize][sq as usize];
+            pins |= CHECK_PATH[king_sq.0 as usize][sq.0 as usize];
         };
     });
     pins
@@ -58,27 +58,23 @@ fn diag_pins(is_white: bool, board: &Board) -> Bitboard {
 
 pub(crate) static CHECK_PATH: [[Bitboard; 64]; 64] = {
     let mut bbs = [[Bitboard::default(); 64]; 64];
-    let mut king_sq = 0;
-    while king_sq < 64 {
-        let mut enemy_sq = 0;
-        while enemy_sq < 64 {
+    for king_sq in squares() {
+        for enemy_sq in squares() {
             let dir = Direction::toward(king_sq, enemy_sq);
             if let Some(dir) = dir {
                 let mut sq = king_sq;
                 let mut bb = Bitboard::default();
                 while sq != enemy_sq {
                     if king_sq < enemy_sq {
-                        sq += dir as u32;
+                        sq = sq.shifted_by(dir).unwrap();
                     } else {
-                        sq -= dir as u32;
+                        sq = sq.shifted_by(dir.opposite()).unwrap();
                     }
-                    bb |= bb![sq];
+                    bb |= sq.into();
                 }
-                bbs[king_sq as usize][enemy_sq as usize] = bb;
+                bbs[king_sq.0 as usize][enemy_sq.0 as usize] = bb;
             }
-            enemy_sq += 1;
         }
-        king_sq += 1;
     }
     bbs
 };
@@ -86,6 +82,7 @@ pub(crate) static CHECK_PATH: [[Bitboard; 64]; 64] = {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitboard::bb;
     use test_case::test_case;
 
     #[test_case(0, 0 => Bitboard::default())]

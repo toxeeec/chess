@@ -1,4 +1,10 @@
-use bitboard::{shift::Direction, square::Square};
+use bitboard::{
+    shift::Direction,
+    square::{
+        Square, BLACK_KING_SQ, BLACK_LEFT_ROOK_SQ, BLACK_RIGHT_ROOK_SQ, WHITE_KING_SQ,
+        WHITE_LEFT_ROOK_SQ, WHITE_RIGHT_ROOK_SQ,
+    },
+};
 
 use super::moves::{Move, Type};
 
@@ -22,7 +28,7 @@ impl State {
                 } else {
                     Direction::North
                 };
-                self.ep = Some(Square::new(mov.to()).shifted_by(dir));
+                self.ep = mov.to().shifted_by(dir);
             }
             Type::KingCastle | Type::QueenCastle => {
                 if self.white {
@@ -37,22 +43,22 @@ impl State {
                 let from = mov.from();
                 if self.white {
                     match from {
-                        4 => {
+                        WHITE_KING_SQ => {
                             self.wk = false;
                             self.wq = false;
                         }
-                        0 => self.wq = false,
-                        7 => self.wk = false,
+                        WHITE_LEFT_ROOK_SQ => self.wq = false,
+                        WHITE_RIGHT_ROOK_SQ => self.wk = false,
                         _ => (),
                     }
                 } else {
                     match from {
-                        60 => {
+                        BLACK_KING_SQ => {
                             self.bk = false;
                             self.bq = false;
                         }
-                        56 => self.bq = false,
-                        63 => self.bk = false,
+                        BLACK_LEFT_ROOK_SQ => self.bq = false,
+                        BLACK_RIGHT_ROOK_SQ => self.bk = false,
                         _ => (),
                     }
                 }

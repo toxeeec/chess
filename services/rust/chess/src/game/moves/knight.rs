@@ -8,7 +8,7 @@ pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, ch
     let enemy_or_empty = board.enemy_or_empty(state.white);
     let (mut from, mut to);
     for_each!(bb, from, {
-        let mut moves = KNIGHT_LOOKUP[from as usize] & enemy_or_empty & checkmask;
+        let mut moves = KNIGHT_LOOKUP[from.0 as usize] & enemy_or_empty & checkmask;
         for_each!(moves, to, {
             let typ = if enemy.contains(to) {
                 Type::Capture

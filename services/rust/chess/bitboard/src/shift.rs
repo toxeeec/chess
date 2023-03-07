@@ -1,5 +1,7 @@
 use std::cmp::{max, min};
 
+use crate::square::Square;
+
 use super::{Bitboard, FILE_A, FILE_B, FILE_G, FILE_H};
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -23,15 +25,13 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub const fn toward(sq1: u32, sq2: u32) -> Option<Self> {
-        debug_assert!(sq1 < 64);
-        debug_assert!(sq2 < 64);
+    pub const fn toward(sq1: Square, sq2: Square) -> Option<Self> {
         let diff = max(sq1, sq2) - min(sq1, sq2);
         if diff == 0 {
             None
-        } else if file_of(sq1) == file_of(sq2) {
+        } else if sq1.file() == sq2.file() {
             Some(Direction::North)
-        } else if rank_of(sq1) == rank_of(sq2) {
+        } else if sq1.rank() == sq2.rank() {
             Some(Direction::East)
         } else if diff % 7 == 0 {
             Some(Direction::NorthWest)
@@ -61,13 +61,6 @@ impl Direction {
             Direction::Nww => Direction::See,
             Direction::Nnw => Direction::Sse,
         }
-    }
-
-    pub const fn shift(self, mut sq: u32) -> u32 {
-        debug_assert!(sq < 64);
-        sq = sq.wrapping_add(self as u32);
-        debug_assert!(sq < 64);
-        sq
     }
 }
 
@@ -159,14 +152,6 @@ impl Bitboard {
             self.shifted::<{ Direction::NorthEast }>()
         }
     }
-}
-
-const fn rank_of(sq: u32) -> u32 {
-    sq / 8
-}
-
-const fn file_of(sq: u32) -> u32 {
-    sq % 8
 }
 
 #[cfg(test)]

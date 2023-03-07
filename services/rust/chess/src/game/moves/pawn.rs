@@ -5,7 +5,9 @@ use crate::game::{
     piece::Piece,
     state::State,
 };
-use bitboard::{bb, for_each, shift::Direction, Bitboard, RANK_1, RANK_3, RANK_6, RANK_8};
+use bitboard::{
+    bb, for_each, shift::Direction, square::Square, Bitboard, RANK_1, RANK_3, RANK_6, RANK_8,
+};
 
 const fn last_rank(is_white: bool) -> Bitboard {
     if is_white {
@@ -23,12 +25,11 @@ const fn third_rank(is_white: bool) -> Bitboard {
     }
 }
 
-const fn from<T: ~const Into<u32>>(is_white: bool, to: u32, dir: T) -> u32 {
-    debug_assert!(to < 64);
+const fn from<T: ~const Into<u32>>(is_white: bool, to: Square, dir: T) -> Square {
     if is_white {
-        to - dir.into()
+        (to.0 - dir.into()).into()
     } else {
-        to + dir.into()
+        (to.0 + dir.into()).into()
     }
 }
 
@@ -124,33 +125,32 @@ pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, chec
     promotion_captures::<false>(state.white, shifted & last_rank(state.white), list);
 
     // TODO: refactor
-    if let Some(ep_sq) = state.ep {
-        let ep_bb: Bitboard = ep_sq.into();
-        let mut bb = (ep_bb.shifted_backward_left(state.white)
-            | ep_bb.shifted_backward_right(state.white))
-            & not_hv_pinned;
+    let Some(ep_sq) = state.ep else { return };
+    let ep_bb = Bitboard::from(ep_sq);
+    let mut bb = (ep_bb.shifted_backward_left(state.white)
+        | ep_bb.shifted_backward_right(state.white))
+        & not_hv_pinned;
 
-        let ep_pawn = from(state.white, ep_sq.0, Direction::North);
-        let mut from;
-        for_each!(bb, from, {
-            let mut queen_or_rook = board.get::<{ Piece::Queen }>(!state.white)
-                | board.get::<{ Piece::Rook }>(!state.white);
-            let king_bb = board.get::<{ Piece::King }>(state.white);
+    let ep_pawn = from(state.white, ep_sq, Direction::North);
+    let mut from;
+    for_each!(bb, from, {
+        let mut queen_or_rook = board.get::<{ Piece::Queen }>(!state.white)
+            | board.get::<{ Piece::Rook }>(!state.white);
+        let king_bb = board.get::<{ Piece::King }>(state.white);
 
-            // https://lichess.org/editor/8/8/8/kq1pP1K1/8/8/8/8_w_-_d6_0_1
-            let occ = board.occ & !bb![from, ep_pawn];
-            let mut qr_sq;
-            for_each!(queen_or_rook, qr_sq, {
-                if rook_moves(qr_sq, occ) & king_bb != Bitboard::default() {
-                    return;
-                }
-            });
-
-            let is_pinned = pins.diag.contains(from);
-            let is_ep_square_pinned = pins.diag.contains(ep_sq.0);
-            if !is_pinned || is_ep_square_pinned {
-                list.push(Move::new(from, ep_sq.0, Type::EnPassant));
+        // https://lichess.org/editor/8/8/8/kq1pP1K1/8/8/8/8_w_-_d6_0_1
+        let occ = board.occ & !(bb![from.0, ep_pawn.0]);
+        let mut qr_sq;
+        for_each!(queen_or_rook, qr_sq, {
+            if rook_moves(qr_sq, occ) & king_bb != Bitboard::default() {
+                return;
             }
         });
-    }
+
+        let is_pinned = pins.diag.contains(from);
+        let is_ep_square_pinned = pins.diag.contains(ep_sq);
+        if !is_pinned || is_ep_square_pinned {
+            list.push(Move::new(from, ep_sq, Type::EnPassant));
+        }
+    });
 }
