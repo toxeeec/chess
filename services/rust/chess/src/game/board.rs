@@ -11,7 +11,6 @@ use super::{
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Board {
     pub pieces: [Bitboard; 12],
-
     pub white: Bitboard,
     pub black: Bitboard,
     pub occ: Bitboard,

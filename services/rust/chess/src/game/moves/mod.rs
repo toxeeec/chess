@@ -1,7 +1,7 @@
 use self::{checkmask::checkmask_and_banned, pins::Pins};
 use super::{board::Board, piece::Piece, state::State};
 use bishop::bishop;
-use bitboard::square::Square;
+use bitboard::{square::Square, Bitboard};
 use king::king;
 use knight::knight;
 use num_derive::FromPrimitive;
@@ -107,11 +107,12 @@ impl Debug for Move {
     }
 }
 
-pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) {
+// returns if king is currently in check
+pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) -> bool {
     let (checkmask, banned) = checkmask_and_banned(state.white, board);
     king(board, state, list, banned);
     if checkmask.is_empty() {
-        return;
+        return true;
     }
 
     let pins = &Pins::new(state.white, board);
@@ -120,4 +121,5 @@ pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) {
     knight(board, state, list, pins, checkmask);
     bishop(board, state, list, pins, checkmask);
     queen(board, state, list, pins, checkmask);
+    checkmask != !Bitboard::default()
 }

@@ -33,13 +33,16 @@ impl FromStr for Game {
             Counter::default()
         };
         let mut moves = Vec::with_capacity(32);
-        moves::generate(&mut moves, &board, state);
-        Ok(Game {
+        let in_check = moves::generate(&mut moves, &board, state);
+        let mut game = Game {
             board,
             state,
             counter,
             moves,
-        })
+            result: None,
+        };
+        game.set_result(in_check);
+        Ok(game)
     }
 }
 

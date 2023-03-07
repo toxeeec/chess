@@ -10,22 +10,22 @@ pub mod moves;
 mod piece;
 mod state;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Game {
     pub board: Board,
     pub state: State,
     pub counter: Counter,
     pub moves: Vec<Move>,
+    pub result: Option<f32>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum MoveError {
     #[error("{0} is not a legal move")]
     Illegal(Move),
 }
 
 impl Game {
-    // TODO: handle checkmate, stalemate
     pub fn make_move(&mut self, mov: Move) -> Result<(), MoveError> {
         if !self.moves.contains(&mov) {
             return Err(MoveError::Illegal(mov));
@@ -34,8 +34,21 @@ impl Game {
         self.board.update(mov, self.state.white);
         self.state.update(mov);
         self.moves.clear();
-        moves::generate(&mut self.moves, &self.board, self.state);
+        let in_check = moves::generate(&mut self.moves, &self.board, self.state);
+        self.set_result(in_check);
         Ok(())
+    }
+
+    pub fn set_result(&mut self, in_check: bool) {
+        self.result = if self.moves.is_empty() {
+            if in_check {
+                Some(!self.state.white as u32 as f32)
+            } else {
+                Some(0.5)
+            }
+        } else {
+            None
+        }
     }
 
     #[cfg(test)]
@@ -89,6 +102,7 @@ impl Default for Game {
             state,
             counter,
             moves,
+            result: None,
         }
     }
 }
@@ -117,5 +131,13 @@ mod tests {
     #[test_case("8/8/8/kq1pP1K1/8/8/8/8 w - d6 0 1".parse().unwrap(), 1 => 9; "illegal ep")]
     fn perft_tests(game: Game, depth: u32) -> u32 {
         game.perft(depth)
+    }
+
+    #[test_case(Game::default() => None)]
+    #[test_case("7k/6Q1/5K2/8/8/8/8/8 b - -".parse().unwrap()=> Some(1.0))]
+    #[test_case("8/8/8/8/8/5k2/6q1/7K w - - 0 1".parse().unwrap() => Some(0.0))]
+    #[test_case("6k1/8/5Q1K/8/8/8/8/8 b - - 0 1".parse().unwrap() => Some(0.5))]
+    fn set_result_tests(game: Game) -> Option<f32> {
+        game.result
     }
 }
