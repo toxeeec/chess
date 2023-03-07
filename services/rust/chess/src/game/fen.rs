@@ -1,4 +1,4 @@
-use super::{board::Board, moves, piece::ParsePieceError, state::State, Game};
+use super::{board::Board, counter::Counter, moves, piece::ParsePieceError, state::State, Game};
 use bitboard::square::{ParseSquareError, Square};
 use std::str::FromStr;
 use thiserror::Error;
@@ -13,6 +13,8 @@ pub enum ParseGameError {
     State(#[from] ParseStateError),
     #[error("invalid en passant target square")]
     EnPassant(#[from] ParseSquareError),
+    #[error("invalid counters")]
+    Counter(#[from] ParseCounterError),
 }
 
 impl FromStr for Game {
@@ -25,11 +27,17 @@ impl FromStr for Game {
         }
         let board = fields[0].parse()?;
         let state = fields[1..4].try_into()?;
+        let counter = if fields.len() == 6 {
+            fields[4..6].try_into()?
+        } else {
+            Counter::default()
+        };
         let mut moves = Vec::with_capacity(32);
         moves::generate(&mut moves, &board, state);
         Ok(Game {
             board,
             state,
+            counter,
             moves,
         })
     }
@@ -129,6 +137,39 @@ impl TryFrom<&[&str]> for State {
     }
 }
 
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum ParseCounterError {
+    #[error("halfmove clock must be a number but was {0}")]
+    HalfMoveFormat(String),
+    #[error("fullmove counter must be a number but was {0}")]
+    FullMoveFormat(String),
+    #[error("halfmove clock must be a positive number but was {0}")]
+    HalfMove(i32),
+    #[error("fullmove counter must be greater than 0 but was {0}")]
+    FullMove(i32),
+}
+
+impl TryFrom<&[&str]> for Counter {
+    type Error = ParseCounterError;
+    fn try_from(value: &[&str]) -> Result<Self, Self::Error> {
+        let half = value[0]
+            .parse::<i32>()
+            .map_err(|_| ParseCounterError::HalfMoveFormat(value[0].to_string()))
+            .and_then(|x| x.try_into().map_err(|_| ParseCounterError::HalfMove(x)))?;
+        let full = match value[1].parse::<i32>() {
+            Ok(x) => {
+                if x > 0 {
+                    x.try_into().unwrap()
+                } else {
+                    return Err(ParseCounterError::FullMove(x));
+                }
+            }
+            Err(_) => return Err(ParseCounterError::FullMoveFormat(value[1].to_string())),
+        };
+        Ok(Self { half, full })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,6 +194,16 @@ mod tests {
     #[test_case(&["w", "KQkq", "aa9"] => Err(ParseStateError::EnPassantFormat(ParseSquareError::Format)))]
     #[test_case(&["w", "KQkq", "e4"] => Err(ParseStateError::EnPassant(4)))]
     fn state_tryfrom_tests(value: &[&str]) -> Result<State, ParseStateError> {
+        value.try_into()
+    }
+
+    #[test_case(&["0", "1"] => Ok(Counter::default()))]
+    #[test_case(&["a", "1"] => Err(ParseCounterError::HalfMoveFormat("a".into())))]
+    #[test_case(&["0", "a"] => Err(ParseCounterError::FullMoveFormat("a".into())))]
+    #[test_case(&["-1", "1"] => Err(ParseCounterError::HalfMove(-1)))]
+    #[test_case(&["0", "-1"] => Err(ParseCounterError::FullMove(-1)))]
+    #[test_case(&["0", "0"] => Err(ParseCounterError::FullMove(0)))]
+    fn counter_tryfrom_tests(value: &[&str]) -> Result<Counter, ParseCounterError> {
         value.try_into()
     }
 }

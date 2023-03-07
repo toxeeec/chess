@@ -1,9 +1,10 @@
 use thiserror::Error;
 
-use self::{board::Board, moves::Move, state::State};
+use self::{board::Board, counter::Counter, moves::Move, state::State};
 use std::fmt::Debug;
 
 mod board;
+mod counter;
 mod fen;
 pub mod moves;
 mod piece;
@@ -13,8 +14,8 @@ mod state;
 pub struct Game {
     pub board: Board,
     pub state: State,
+    pub counter: Counter,
     pub moves: Vec<Move>,
-    // TODO: add move counters
 }
 
 #[derive(Error, Debug)]
@@ -24,10 +25,12 @@ pub enum MoveError {
 }
 
 impl Game {
+    // TODO: handle checkmate, stalemate
     pub fn make_move(&mut self, mov: Move) -> Result<(), MoveError> {
         if !self.moves.contains(&mov) {
             return Err(MoveError::Illegal(mov));
         }
+        self.counter.update(mov, self.state.white, &self.board);
         self.board.update(mov, self.state.white);
         self.state.update(mov);
         self.moves.clear();
@@ -78,11 +81,13 @@ impl Default for Game {
     fn default() -> Self {
         let board = Board::default();
         let state = State::default();
+        let counter = Counter::default();
         let mut moves = Vec::with_capacity(32);
         moves::generate(&mut moves, &board, state);
         Self {
             board,
             state,
+            counter,
             moves,
         }
     }
