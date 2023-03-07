@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use self::{board::Board, moves::Move, state::State};
 use std::fmt::Debug;
 
@@ -15,15 +17,22 @@ pub struct Game {
     // TODO: add move counters
 }
 
+#[derive(Error, Debug)]
+pub enum MoveError {
+    #[error("{0} is not a legal move")]
+    Illegal(Move),
+}
+
 impl Game {
-    pub fn make_move(&mut self, mov: Move) {
+    pub fn make_move(&mut self, mov: Move) -> Result<(), MoveError> {
         if !self.moves.contains(&mov) {
-            // TODO: return error
+            return Err(MoveError::Illegal(mov));
         }
         self.board.update(mov, self.state.white);
         self.state.update(mov);
         self.moves.clear();
         moves::generate(&mut self.moves, &self.board, self.state);
+        Ok(())
     }
 
     #[cfg(test)]
@@ -39,7 +48,7 @@ impl Game {
         for mov in &self.moves {
             let mut g = self.clone();
             let mut nodes = 0;
-            g.make_move(*mov);
+            g.make_move(*mov).unwrap();
             g.perft_inner(depth - 1, &mut nodes);
             total += nodes;
             println!("{}: {}", mov, nodes);
@@ -59,7 +68,7 @@ impl Game {
         }
         for mov in &self.moves {
             let mut g = self.clone();
-            g.make_move(*mov);
+            g.make_move(*mov).unwrap();
             g.perft_inner(depth - 1, nodes);
         }
     }
