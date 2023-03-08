@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use self::{board::Board, counter::Counter, moves::Move, state::State};
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 mod board;
 mod counter;
@@ -10,13 +10,14 @@ pub mod moves;
 mod piece;
 mod state;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Game {
     pub board: Board,
     pub state: State,
     pub counter: Counter,
     pub moves: Vec<Move>,
     pub result: Option<f32>,
+    pub positions: HashMap<(Board, State), u8>,
     // TODO: add timer
 }
 
@@ -24,23 +25,54 @@ pub struct Game {
 pub enum MoveError {
     #[error("{0} is not a legal move")]
     Illegal(Move),
+    #[error("the game has already finished")]
+    Finished,
 }
 
 impl Game {
+    pub fn new(board: Board, state: State, counter: Counter) -> Self {
+        let mut game = Self {
+            board,
+            state,
+            counter,
+            moves: Vec::with_capacity(32),
+            result: None,
+            positions: HashMap::with_capacity(16),
+        };
+        game.positions.insert((board, state), 1);
+        let in_check = moves::generate(&mut game);
+        game.set_result::<false>(in_check);
+        game
+    }
+
     pub fn make_move(&mut self, mov: Move) -> Result<(), MoveError> {
+        self.make_move_inner::<false>(mov)
+    }
+
+    fn make_move_inner<const IS_PERFT: bool>(&mut self, mov: Move) -> Result<(), MoveError> {
+        if self.result.is_some() {
+            return Err(MoveError::Finished);
+        }
         if !self.moves.contains(&mov) {
             return Err(MoveError::Illegal(mov));
         }
-        self.counter.update(mov, self.state.white, &self.board);
+        let irreversible = mov.is_irreversible(self.state.white, &self.board);
+        self.counter.update(irreversible, self.state.white);
         self.board.update(mov, self.state.white);
         self.state.update(mov);
-        self.moves.clear();
-        let in_check = moves::generate(&mut self.moves, &self.board, self.state);
-        self.set_result(in_check);
+        if irreversible {
+            self.positions.clear();
+        }
+        self.positions
+            .entry((self.board, self.state))
+            .and_modify(|x| *x += 1)
+            .or_insert(1);
+        let in_check = moves::generate(self);
+        self.set_result::<IS_PERFT>(in_check);
         Ok(())
     }
 
-    pub fn set_result(&mut self, in_check: bool) {
+    fn set_result<const IS_PERFT: bool>(&mut self, in_check: bool) {
         if self.moves.is_empty() {
             if in_check {
                 self.result = Some(!self.state.white as u32 as f32);
@@ -49,11 +81,18 @@ impl Game {
             }
             return;
         }
+        if IS_PERFT {
+            return;
+        }
         if self.counter.half >= 100 {
             self.result = Some(0.5);
             return;
         }
         if !self.board.has_sufficient_material(true) && !self.board.has_sufficient_material(false) {
+            self.result = Some(0.5);
+            return;
+        }
+        if *self.positions.get(&(self.board, self.state)).unwrap_or(&0) >= 3 {
             self.result = Some(0.5);
         }
     }
@@ -71,7 +110,7 @@ impl Game {
         for mov in &self.moves {
             let mut g = self.clone();
             let mut nodes = 0;
-            g.make_move(*mov).unwrap();
+            g.make_move_inner::<true>(*mov).unwrap();
             g.perft_inner(depth - 1, &mut nodes);
             total += nodes;
             println!("{}: {}", mov, nodes);
@@ -91,7 +130,7 @@ impl Game {
         }
         for mov in &self.moves {
             let mut g = self.clone();
-            g.make_move(*mov).unwrap();
+            g.make_move_inner::<true>(*mov).unwrap();
             g.perft_inner(depth - 1, nodes);
         }
     }
@@ -102,15 +141,7 @@ impl Default for Game {
         let board = Board::default();
         let state = State::default();
         let counter = Counter::default();
-        let mut moves = Vec::with_capacity(32);
-        moves::generate(&mut moves, &board, state);
-        Self {
-            board,
-            state,
-            counter,
-            moves,
-            result: None,
-        }
+        Self::new(board, state, counter)
     }
 }
 
@@ -129,6 +160,7 @@ impl Debug for Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::moves::Type;
     use test_case::test_case;
 
     #[test_case(Game::default(), 5 => 4865609; "startpost depth 5")]
@@ -141,10 +173,25 @@ mod tests {
     }
 
     #[test_case(Game::default() => None)]
-    #[test_case("7k/6Q1/5K2/8/8/8/8/8 b - -".parse().unwrap()=> Some(1.0))]
-    #[test_case("8/8/8/8/8/5k2/6q1/7K w - - 0 1".parse().unwrap() => Some(0.0))]
-    #[test_case("6k1/8/5Q1K/8/8/8/8/8 b - - 0 1".parse().unwrap() => Some(0.5))]
+    #[test_case("7k/6Q1/5K2/8/8/8/8/8 b - -".parse().unwrap()=> Some(1.0); "white won")]
+    #[test_case("8/8/8/8/8/5k2/6q1/7K w - - 0 1".parse().unwrap() => Some(0.0); "black won")]
+    #[test_case("6k1/8/5Q1K/8/8/8/8/8 b - - 0 1".parse().unwrap() => Some(0.5); "stalemate")]
+    #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 100 1".parse().unwrap() => Some(0.5); "halfmove clock")]
     fn set_result_tests(game: Game) -> Option<f32> {
         game.result
+    }
+
+    #[test]
+    fn repetition_test() {
+        let mut game = Game::default();
+        let _ = game.make_move(Move::new(6.into(), 21.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(62.into(), 45.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(21.into(), 6.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(45.into(), 62.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(6.into(), 21.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(62.into(), 45.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(21.into(), 6.into(), Type::Quiet));
+        let _ = game.make_move(Move::new(45.into(), 62.into(), Type::Quiet));
+        assert_eq!(game.result, Some(0.5));
     }
 }

@@ -1,5 +1,5 @@
 use self::{checkmask::checkmask_and_banned, pins::Pins};
-use super::{board::Board, piece::Piece, state::State};
+use super::{board::Board, piece::Piece, Game};
 use bishop::bishop;
 use bitboard::{square::Square, Bitboard};
 use king::king;
@@ -79,6 +79,14 @@ impl Move {
     pub fn typ(self) -> Type {
         num::FromPrimitive::from_u16(self.0 & 0b1111).unwrap()
     }
+
+    pub fn is_irreversible(self, is_white: bool, board: &Board) -> bool {
+        match self.typ() {
+            Type::Quiet => board.get::<{ Piece::Pawn }>(is_white).contains(self.from()),
+            Type::DoublePush | Type::Capture => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Move {
@@ -108,7 +116,11 @@ impl Debug for Move {
 }
 
 // returns if king is currently in check
-pub fn generate(list: &mut Vec<Move>, board: &Board, state: State) -> bool {
+pub fn generate(game: &mut Game) -> bool {
+    game.moves.clear();
+    let state = game.state;
+    let board = &game.board;
+    let list = &mut game.moves;
     let (checkmask, banned) = checkmask_and_banned(state.white, board);
     king(board, state, list, banned);
     if checkmask.is_empty() {

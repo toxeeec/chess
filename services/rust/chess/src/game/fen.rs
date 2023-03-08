@@ -1,4 +1,4 @@
-use super::{board::Board, counter::Counter, moves, piece::ParsePieceError, state::State, Game};
+use super::{board::Board, counter::Counter, piece::ParsePieceError, state::State, Game};
 use bitboard::square::{ParseSquareError, Square};
 use std::str::FromStr;
 use thiserror::Error;
@@ -32,17 +32,7 @@ impl FromStr for Game {
         } else {
             Counter::default()
         };
-        let mut moves = Vec::with_capacity(32);
-        let in_check = moves::generate(&mut moves, &board, state);
-        let mut game = Game {
-            board,
-            state,
-            counter,
-            moves,
-            result: None,
-        };
-        game.set_result(in_check);
-        Ok(game)
+        Ok(Game::new(board, state, counter))
     }
 }
 
@@ -178,10 +168,13 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" => Ok(Game::default()))]
+    #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" => Ok(Game::default().board))]
     #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq" => Err(ParseGameError::Format))]
-    fn game_fromstr_tests(s: &str) -> Result<Game, ParseGameError> {
-        s.parse()
+    fn game_fromstr_tests(s: &str) -> Result<Board, ParseGameError> {
+        match s.parse::<Game>() {
+            Ok(game) => Ok(game.board),
+            Err(e) => Err(e),
+        }
     }
 
     #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR" => Ok(Board::default()))]

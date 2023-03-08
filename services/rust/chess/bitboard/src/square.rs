@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::{bb, shift::Direction, Bitboard};
 
 #[derive_const(PartialOrd, Ord, PartialEq)]
-#[derive(Debug, Eq, Clone, Copy)]
+#[derive(Debug, Eq, Clone, Copy, Hash)]
 pub struct Square(pub u32);
 
 #[derive(Error, Debug, PartialEq, Eq)]

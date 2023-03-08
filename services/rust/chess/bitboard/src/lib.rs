@@ -20,7 +20,7 @@ use std::fmt::Debug;
 mod bits;
 
 #[derive_const(Default, PartialEq)]
-#[derive(Eq, Clone, Copy)]
+#[derive(Eq, Clone, Copy, Hash)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {

@@ -8,7 +8,7 @@ use super::{
     piece::Piece,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Board {
     pub pieces: [Bitboard; 12],
     pub white: Bitboard,

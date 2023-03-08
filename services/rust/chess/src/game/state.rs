@@ -8,7 +8,7 @@ use bitboard::{
 
 use super::moves::{Move, Type};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State {
     pub white: bool,
     pub wk: bool,
