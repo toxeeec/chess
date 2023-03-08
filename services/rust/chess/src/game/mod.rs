@@ -17,6 +17,7 @@ pub struct Game {
     pub counter: Counter,
     pub moves: Vec<Move>,
     pub result: Option<f32>,
+    // TODO: add timer
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -40,14 +41,20 @@ impl Game {
     }
 
     pub fn set_result(&mut self, in_check: bool) {
-        self.result = if self.moves.is_empty() {
+        if self.moves.is_empty() {
             if in_check {
-                Some(!self.state.white as u32 as f32)
+                self.result = Some(!self.state.white as u32 as f32);
             } else {
-                Some(0.5)
+                self.result = Some(0.5);
             }
-        } else {
-            None
+            return;
+        }
+        if self.counter.half >= 100 {
+            self.result = Some(0.5);
+            return;
+        }
+        if !self.board.has_sufficient_material(true) && !self.board.has_sufficient_material(false) {
+            self.result = Some(0.5);
         }
     }
 

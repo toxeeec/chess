@@ -87,6 +87,19 @@ impl Board {
         self.occ = self.white | self.black;
     }
 
+    pub fn has_sufficient_material(&self, is_white: bool) -> bool {
+        if !(self.get::<{ Piece::Pawn }>(is_white)
+            | self.get::<{ Piece::Rook }>(is_white)
+            | self.get::<{ Piece::Queen }>(is_white))
+        .is_empty()
+        {
+            return true;
+        }
+        let bishop_count = self.get::<{ Piece::Bishop }>(is_white).count();
+        let knight_count = self.get::<{ Piece::Knight }>(is_white).count();
+        (bishop_count > 0 && knight_count > 0) || bishop_count > 1 || knight_count > 2
+    }
+
     pub fn update(&mut self, mov: Move, is_white: bool) {
         let from = mov.from();
         let mut to = mov.to();
@@ -182,5 +195,20 @@ impl Debug for Board {
             )?;
         }
         writeln!(f, "\n   A B C D E F G H")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(Board::default() => true)]
+    #[test_case("7k/8/8/8/8/8/8/KB6".parse().unwrap() => false; "one bishop")]
+    #[test_case("7k/8/8/8/8/8/8/KN6".parse().unwrap() => false; "one knight")]
+    #[test_case("7k/8/8/8/8/8/8/KNN5".parse().unwrap() => false; "two knights")]
+    #[test_case("7k/8/8/8/8/8/8/K7".parse().unwrap() => false; "only king")]
+    fn has_sufficient_material_tests(board: Board) -> bool {
+        board.has_sufficient_material(true)
     }
 }
