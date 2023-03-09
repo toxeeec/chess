@@ -1,0 +1,11 @@
+type Query {
+	ping(input: PingInput!): PingResponse!
+}
+
+input PingInput {
+	text: String!
+}
+
+type PingResponse {
+	text: String!
+}
