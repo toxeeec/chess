@@ -1,6 +1,6 @@
 use super::{board::Board, counter::Counter, piece::ParsePieceError, state::State, Game};
 use bitboard::square::{ParseSquareError, Square};
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -36,6 +36,12 @@ impl FromStr for Game {
     }
 }
 
+impl Display for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} {}", self.board, self.state, self.counter)
+    }
+}
+
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ParseBoardError {
     #[error("invalid piece")]
@@ -65,6 +71,43 @@ impl FromStr for Board {
         board.set_black();
         board.set_occ();
         Ok(board)
+    }
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut fen = String::with_capacity(43);
+        let mut sq = 56;
+        let mut since = 0;
+        while sq >= 0 {
+            match self.piece_at((sq as u32).into()) {
+                Some((piece, is_white)) => {
+                    if since > 0 {
+                        fen.push(char::from_digit(since, 10).unwrap());
+                        since = 0;
+                    }
+                    let mut piece = char::from(piece);
+                    if is_white {
+                        piece.make_ascii_uppercase();
+                    }
+                    fen.push(piece);
+                }
+                None => since += 1,
+            }
+            if sq % 8 == 7 {
+                if since > 0 {
+                    fen.push(char::from_digit(since, 10).unwrap());
+                    since = 0;
+                }
+                if sq > 7 {
+                    fen.push('/');
+                }
+                sq -= 15;
+            } else {
+                sq += 1;
+            }
+        }
+        write!(f, "{fen}")
     }
 }
 
@@ -130,6 +173,35 @@ impl TryFrom<&[&str]> for State {
     }
 }
 
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut castling = String::with_capacity(4);
+        if self.wk {
+            castling.push('K')
+        }
+        if self.wq {
+            castling.push('Q')
+        }
+        if self.bk {
+            castling.push('k')
+        }
+        if self.bq {
+            castling.push('q')
+        }
+        write!(
+            f,
+            "{} {} {}",
+            if self.white { 'w' } else { 'b' },
+            castling,
+            if let Some(ep) = self.ep {
+                ep.to_string()
+            } else {
+                "-".to_string()
+            }
+        )
+    }
+}
+
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ParseCounterError {
     #[error("halfmove clock must be a number but was {0}")]
@@ -160,6 +232,12 @@ impl TryFrom<&[&str]> for Counter {
             Err(_) => return Err(ParseCounterError::FullMoveFormat(value[1].to_string())),
         };
         Ok(Self { half, full })
+    }
+}
+
+impl Display for Counter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.half, self.full)
     }
 }
 
@@ -201,5 +279,13 @@ mod tests {
     #[test_case(&["0", "0"] => Err(ParseCounterError::FullMove(0)))]
     fn counter_tryfrom_tests(value: &[&str]) -> Result<Counter, ParseCounterError> {
         value.try_into()
+    }
+
+    const FEN: &str = "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
+
+    #[test_case(Game::default() => "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")]
+    #[test_case(FEN.parse().unwrap() => FEN)]
+    fn game_to_string_tests(game: Game) -> String {
+        game.to_string()
     }
 }

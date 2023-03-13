@@ -4,16 +4,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.69"
 bitboard = {path = "./bitboard"}
 enum-iterator = "1.4.0"
+futures-core = "0.3.26"
+futures-util = "0.3.26"
 magics = { path = "./magics" }
 num = "0.4.0"
 num-derive = "0.3.3"
 num-traits = "0.2.15"
+prost = "0.11.8"
 rand = "0.8.5"
 test-case = "3.0.0"
 thiserror = "1.0.38"
+tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = "0.1.12"
+tonic = "0.8.3"
 
 [build-dependencies]
 magics = { path = "./magics" }
+tonic-build = "0.8.4"
 quote = "1.0.23"

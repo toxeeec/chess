@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use enum_iterator::Sequence;
 use num_derive::FromPrimitive;
 use thiserror::Error;
@@ -35,19 +33,15 @@ impl TryFrom<char> for Piece {
     }
 }
 
-impl Display for Piece {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Piece::Pawn => 'p',
-                Piece::Rook => 'r',
-                Piece::Knight => 'n',
-                Piece::Bishop => 'b',
-                Piece::Queen => 'q',
-                Piece::King => 'k',
-            }
-        )
+impl From<Piece> for char {
+    fn from(value: Piece) -> Self {
+        match value {
+            Piece::Pawn => 'p',
+            Piece::Rook => 'r',
+            Piece::Knight => 'n',
+            Piece::Bishop => 'b',
+            Piece::Queen => 'q',
+            Piece::King => 'k',
+        }
     }
 }

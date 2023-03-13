@@ -1,4 +1,4 @@
-use super::Move;
+use super::{list::List, Move};
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
 use bitboard::{
     bb, for_each,
@@ -10,7 +10,7 @@ use bitboard::{
     Bitboard,
 };
 
-pub fn king(board: &Board, state: State, list: &mut Vec<Move>, banned: Bitboard) {
+pub fn king(board: &Board, state: State, list: &mut List, banned: Bitboard) {
     let from = board.get::<{ Piece::King }>(state.white).lsb();
     let enemy = board.enemy(state.white);
     let enemy_or_empty = board.enemy_or_empty(state.white);
@@ -23,7 +23,7 @@ pub fn king(board: &Board, state: State, list: &mut Vec<Move>, banned: Bitboard)
             Type::Quiet
         };
         let m = Move::new(from, to, typ);
-        list.push(m);
+        list.0.push(m);
     });
 
     king_castle(board, state, banned, list);
@@ -92,7 +92,7 @@ fn can_queen_castle(is_white: bool, board: &Board, banned: Bitboard) -> bool {
     }
 }
 
-fn king_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Move>) {
+fn king_castle(board: &Board, state: State, banned: Bitboard, list: &mut List) {
     if (state.white && !state.wk) || (!state.white && !state.bk) {
         return;
     }
@@ -109,10 +109,10 @@ fn king_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Mov
     } else {
         BLACK_KING_KING_CASTLE_SQ
     };
-    list.push(Move::new(from, to, Type::KingCastle));
+    list.0.push(Move::new(from, to, Type::KingCastle));
 }
 
-fn queen_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Move>) {
+fn queen_castle(board: &Board, state: State, banned: Bitboard, list: &mut List) {
     if (state.white && !state.wq) || (!state.white && !state.bq) {
         return;
     }
@@ -129,7 +129,7 @@ fn queen_castle(board: &Board, state: State, banned: Bitboard, list: &mut Vec<Mo
     } else {
         BLACK_KING_QUEEN_CASTLE_SQ
     };
-    list.push(Move::new(from, to, Type::QueenCastle));
+    list.0.push(Move::new(from, to, Type::QueenCastle));
 }
 
 #[cfg(test)]

@@ -1,0 +1,22 @@
+syntax = "proto3";
+package chess;
+option go_package = "github.com/toxeeec/chess/services/go/proto";
+
+service Chess {
+    rpc MakeMove(MakeMoveRequest) returns (MakeMoveResponse);
+    rpc JoinGame(JoinGameRequest) returns (stream JoinGameResponse);
+}
+
+message MakeMoveRequest {
+    string move = 1;
+}
+
+message MakeMoveResponse {}
+
+message JoinGameRequest {}
+
+message JoinGameResponse {
+    string fen = 1;
+    optional double result = 2;
+    repeated string moves = 3;
+}

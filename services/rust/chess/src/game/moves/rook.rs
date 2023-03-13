@@ -1,4 +1,4 @@
-use super::{pins::Pins, Move};
+use super::{list::List, pins::Pins, Move};
 use crate::game::{
     board::Board,
     moves::{magics::rook_moves, Type},
@@ -7,7 +7,7 @@ use crate::game::{
 };
 use bitboard::{for_each, Bitboard};
 
-pub fn rook(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
+pub fn rook(board: &Board, state: State, list: &mut List, pins: &Pins, checkmask: Bitboard) {
     let bb = board.get::<{ Piece::Rook }>(state.white) & !pins.diag;
     inner(bb, board, state, list, pins, checkmask);
 }
@@ -16,7 +16,7 @@ pub(crate) fn inner(
     mut bb: Bitboard,
     board: &Board,
     state: State,
-    list: &mut Vec<Move>,
+    list: &mut List,
     pins: &Pins,
     checkmask: Bitboard,
 ) {
@@ -35,7 +35,7 @@ pub(crate) fn inner(
                 Type::Quiet
             };
             let m = Move::new(from, to, typ);
-            list.push(m);
+            list.0.push(m);
         });
     });
 }

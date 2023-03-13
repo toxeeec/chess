@@ -1,0 +1,21 @@
+input MakeMoveInput {
+	move: String!
+}
+
+type JoinGameResponse {
+	fen: String!
+	result: Float
+	moves: [String!]!
+}
+
+type Query {
+	placeholder: String
+}
+
+type Mutation {
+	makeMove(input: MakeMoveInput!): String
+}
+
+type Subscription {
+	joinGame: JoinGameResponse!
+}

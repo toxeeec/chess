@@ -54,13 +54,13 @@ impl Board {
         self.enemy(is_white) | !self.occ
     }
 
-    fn piece_at(&self, sq: Square) -> Piece {
+    pub fn piece_at(&self, sq: Square) -> Option<(Piece, bool)> {
         for (i, bb) in self.pieces.into_iter().enumerate() {
             if bb.contains(sq) {
-                return num::FromPrimitive::from_usize(i % 6).unwrap();
+                return Some((num::FromPrimitive::from_usize(i % 6).unwrap(), i >= 6));
             }
         }
-        unreachable!("No piece at given square");
+        None
     }
 
     fn clear(&mut self, sq: Square, is_white: bool) {
@@ -105,7 +105,7 @@ impl Board {
         let mut to = mov.to();
         let typ = mov.typ();
         let piece = match typ {
-            Type::Quiet | Type::Capture => self.piece_at(from),
+            Type::Quiet | Type::Capture => self.piece_at(from).unwrap().0,
             Type::KingCastle | Type::QueenCastle => Piece::King,
             _ => Piece::Pawn,
         };

@@ -1,4 +1,4 @@
-use super::{pins::Pins, Move};
+use super::{list::List, pins::Pins, Move};
 use crate::game::{
     board::Board,
     moves::{magics::rook_moves, Type},
@@ -33,34 +33,34 @@ const fn from<T: ~const Into<u32>>(is_white: bool, to: Square, dir: T) -> Square
     }
 }
 
-fn single_pushes(is_white: bool, mut bb: Bitboard, list: &mut Vec<Move>) {
+fn single_pushes(is_white: bool, mut bb: Bitboard, list: &mut List) {
     let mut to;
     for_each!(bb, to, {
         let from = from(is_white, to, Direction::North);
-        list.push(Move::new(from, to, Type::Quiet));
+        list.0.push(Move::new(from, to, Type::Quiet));
     });
 }
 
-fn promotions(is_white: bool, mut bb: Bitboard, list: &mut Vec<Move>) {
+fn promotions(is_white: bool, mut bb: Bitboard, list: &mut List) {
     let mut to;
     for_each!(bb, to, {
         let from = from(is_white, to, Direction::North);
-        list.push(Move::new(from, to, Type::KnightPromotion));
-        list.push(Move::new(from, to, Type::BishopPromotion));
-        list.push(Move::new(from, to, Type::RookPromotion));
-        list.push(Move::new(from, to, Type::QueenPromotion));
+        list.0.push(Move::new(from, to, Type::KnightPromotion));
+        list.0.push(Move::new(from, to, Type::BishopPromotion));
+        list.0.push(Move::new(from, to, Type::RookPromotion));
+        list.0.push(Move::new(from, to, Type::QueenPromotion));
     });
 }
 
-fn double_pushes(is_white: bool, mut bb: Bitboard, list: &mut Vec<Move>) {
+fn double_pushes(is_white: bool, mut bb: Bitboard, list: &mut List) {
     let mut to;
     for_each!(bb, to, {
         let from = from(is_white, to, Direction::North as u32 * 2);
-        list.push(Move::new(from, to, Type::DoublePush));
+        list.0.push(Move::new(from, to, Type::DoublePush));
     });
 }
 
-fn captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, list: &mut Vec<Move>) {
+fn captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, list: &mut List) {
     let dir = if IS_LEFT {
         Direction::NorthWest
     } else {
@@ -69,11 +69,11 @@ fn captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, list: &mut Ve
     let mut to;
     for_each!(bb, to, {
         let from = from(is_white, to, dir);
-        list.push(Move::new(from, to, Type::Capture));
+        list.0.push(Move::new(from, to, Type::Capture));
     });
 }
 
-fn promotion_captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, list: &mut Vec<Move>) {
+fn promotion_captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, list: &mut List) {
     let dir = if IS_LEFT {
         Direction::NorthWest
     } else {
@@ -82,15 +82,18 @@ fn promotion_captures<const IS_LEFT: bool>(is_white: bool, mut bb: Bitboard, lis
     let mut to;
     for_each!(bb, to, {
         let from = from(is_white, to, dir);
-        list.push(Move::new(from, to, Type::KnightPromotionCapture));
-        list.push(Move::new(from, to, Type::BishopPromotionCapture));
-        list.push(Move::new(from, to, Type::RookPromotionCapture));
-        list.push(Move::new(from, to, Type::QueenPromotionCapture));
+        list.0
+            .push(Move::new(from, to, Type::KnightPromotionCapture));
+        list.0
+            .push(Move::new(from, to, Type::BishopPromotionCapture));
+        list.0.push(Move::new(from, to, Type::RookPromotionCapture));
+        list.0
+            .push(Move::new(from, to, Type::QueenPromotionCapture));
     });
 }
 
 #[inline(always)]
-pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
+pub fn pawn(board: &Board, state: State, list: &mut List, pins: &Pins, checkmask: Bitboard) {
     let bb = board.get::<{ Piece::Pawn }>(state.white);
     let empty = !board.occ;
     let not_diag_pinned = bb & !pins.diag;
@@ -145,7 +148,7 @@ pub fn pawn(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, chec
         let is_pinned = pins.diag.contains(from);
         let is_ep_square_pinned = pins.diag.contains(ep_sq);
         if !is_pinned || is_ep_square_pinned {
-            list.push(Move::new(from, ep_sq, Type::EnPassant));
+            list.0.push(Move::new(from, ep_sq, Type::EnPassant));
         }
     });
 }

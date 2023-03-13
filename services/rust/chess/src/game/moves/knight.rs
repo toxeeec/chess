@@ -1,8 +1,8 @@
-use super::{pins::Pins, Move};
+use super::{list::List, pins::Pins, Move};
 use crate::game::{board::Board, moves::Type, piece::Piece, state::State};
 use bitboard::{bb, for_each, shift::Direction, Bitboard};
 
-pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
+pub fn knight(board: &Board, state: State, list: &mut List, pins: &Pins, checkmask: Bitboard) {
     let mut bb = board.get::<{ Piece::Knight }>(state.white) & !(pins.hv | pins.diag);
     let enemy = board.enemy(state.white);
     let enemy_or_empty = board.enemy_or_empty(state.white);
@@ -16,7 +16,7 @@ pub fn knight(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, ch
                 Type::Quiet
             };
             let m = Move::new(from, to, typ);
-            list.push(m);
+            list.0.push(m);
         });
     });
 }

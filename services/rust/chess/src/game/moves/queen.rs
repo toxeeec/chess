@@ -1,8 +1,8 @@
-use super::{bishop, pins::Pins, rook, Move};
+use super::{bishop, list::List, pins::Pins, rook};
 use crate::game::{board::Board, piece::Piece, state::State};
 use bitboard::Bitboard;
 
-pub fn queen(board: &Board, state: State, list: &mut Vec<Move>, pins: &Pins, checkmask: Bitboard) {
+pub fn queen(board: &Board, state: State, list: &mut List, pins: &Pins, checkmask: Bitboard) {
     let bb = board.get::<{ Piece::Queen }>(state.white);
     let not_diag_pinned = bb & !pins.diag;
     rook::inner(not_diag_pinned, board, state, list, pins, checkmask);

@@ -6,16 +6,66 @@ package graph
 
 import (
 	"context"
+	"fmt"
+	"io"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/toxeeec/chess/services/go/gateway/graph/model"
+	"github.com/toxeeec/chess/services/go/proto"
+	"github.com/vektah/gqlparser/v2/gqlerror"
+	"google.golang.org/grpc/status"
 )
 
-// Ping is the resolver for the ping field.
-func (r *queryResolver) Ping(ctx context.Context, input model.PingInput) (model.PingResponse, error) {
-	return model.PingResponse{Text: input.Text}, nil
+// MakeMove is the resolver for the makeMove field.
+func (r *mutationResolver) MakeMove(ctx context.Context, input model.MakeMoveInput) (*string, error) {
+	_, err := r.ChessClient.MakeMove(ctx, &proto.MakeMoveRequest{Move: input.Move})
+	if err != nil {
+		st := status.Convert(err)
+		return nil, gqlerror.Errorf(st.Message())
+		// return &model.Error{Message: st.Message()}, nil
+	}
+	return nil, nil
 }
+
+// Placeholder is the resolver for the placeholder field.
+func (r *queryResolver) Placeholder(ctx context.Context) (*string, error) {
+	panic(fmt.Errorf("not implemented: Placeholder - placeholder"))
+}
+
+// JoinGame is the resolver for the joinGame field.
+func (r *subscriptionResolver) JoinGame(ctx context.Context) (<-chan model.JoinGameResponse, error) {
+	stream, err := r.ChessClient.JoinGame(ctx, &proto.JoinGameRequest{})
+	if err != nil {
+		st := status.Convert(err)
+		return nil, gqlerror.Errorf(st.Message())
+	}
+	ch := make(chan model.JoinGameResponse)
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				st := status.Convert(err)
+				graphql.AddErrorf(ctx, st.Message())
+				return
+			}
+			ch <- model.JoinGameResponse{Fen: res.Fen, Result: res.Result, Moves: res.Moves}
+		}
+	}()
+	return ch, nil
+}
+
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+// Subscription returns SubscriptionResolver implementation.
+func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
+
+type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type subscriptionResolver struct{ *Resolver }

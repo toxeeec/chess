@@ -2,10 +2,12 @@
 
 package model
 
-type PingInput struct {
-	Text string `json:"text"`
+type JoinGameResponse struct {
+	Fen    string   `json:"fen"`
+	Result *float64 `json:"result"`
+	Moves  []string `json:"moves"`
 }
 
-type PingResponse struct {
-	Text string `json:"text"`
+type MakeMoveInput struct {
+	Move string `json:"move"`
 }

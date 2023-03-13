@@ -1,6 +1,13 @@
+use bitboard::square::ParseSquareError;
 use thiserror::Error;
 
-use self::{board::Board, counter::Counter, moves::Move, state::State};
+use self::{
+    board::Board,
+    counter::Counter,
+    moves::{list::List, Move},
+    piece::ParsePieceError,
+    state::State,
+};
 use std::{collections::HashMap, fmt::Debug};
 
 mod board;
@@ -15,16 +22,22 @@ pub struct Game {
     pub board: Board,
     pub state: State,
     pub counter: Counter,
-    pub moves: Vec<Move>,
-    pub result: Option<f32>,
+    pub result: Option<f64>,
+    pub list: List,
     pub positions: HashMap<(Board, State), u8>,
     // TODO: add timer
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum MoveError {
+    #[error("invalid move format")]
+    Format,
+    #[error("invalid square")]
+    Square(#[from] ParseSquareError),
+    #[error("invalid promotion piece")]
+    PromotionPiece(#[from] ParsePieceError),
     #[error("{0} is not a legal move")]
-    Illegal(Move),
+    Illegal(String),
     #[error("the game has already finished")]
     Finished,
 }
@@ -35,7 +48,7 @@ impl Game {
             board,
             state,
             counter,
-            moves: Vec::with_capacity(32),
+            list: List::default(),
             result: None,
             positions: HashMap::with_capacity(16),
         };
@@ -45,16 +58,14 @@ impl Game {
         game
     }
 
-    pub fn make_move(&mut self, mov: Move) -> Result<(), MoveError> {
+    pub fn make_move(&mut self, move_str: &str) -> Result<(), MoveError> {
+        let mov = self.list.find(move_str)?;
         self.make_move_inner::<false>(mov)
     }
 
     fn make_move_inner<const IS_PERFT: bool>(&mut self, mov: Move) -> Result<(), MoveError> {
         if self.result.is_some() {
             return Err(MoveError::Finished);
-        }
-        if !self.moves.contains(&mov) {
-            return Err(MoveError::Illegal(mov));
         }
         let irreversible = mov.is_irreversible(self.state.white, &self.board);
         self.counter.update(irreversible, self.state.white);
@@ -73,9 +84,9 @@ impl Game {
     }
 
     fn set_result<const IS_PERFT: bool>(&mut self, in_check: bool) {
-        if self.moves.is_empty() {
+        if self.list.0.is_empty() {
             if in_check {
-                self.result = Some(!self.state.white as u32 as f32);
+                self.result = Some(!self.state.white as i32 as f64);
             } else {
                 self.result = Some(0.5);
             }
@@ -107,7 +118,7 @@ impl Game {
     #[cfg(debug_assertions)]
     pub fn divide(self, depth: u32) {
         let mut total = 0;
-        for mov in &self.moves {
+        for mov in &self.list.0 {
             let mut g = self.clone();
             let mut nodes = 0;
             g.make_move_inner::<true>(*mov).unwrap();
@@ -125,10 +136,10 @@ impl Game {
             return;
         }
         if depth == 1 {
-            *nodes += self.moves.len() as u32;
+            *nodes += self.list.0.len() as u32;
             return;
         }
-        for mov in &self.moves {
+        for mov in &self.list.0 {
             let mut g = self.clone();
             g.make_move_inner::<true>(*mov).unwrap();
             g.perft_inner(depth - 1, nodes);
@@ -149,8 +160,9 @@ impl Debug for Game {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:?}", self.board)?;
         writeln!(f, "{:?}", self.state)?;
-        writeln!(f)?;
-        for m in &self.moves {
+        writeln!(f, "{:?}", self.counter)?;
+        writeln!(f, "Result: {:?}\n", self.result)?;
+        for m in &self.list.0 {
             writeln!(f, "{:?}", m)?;
         }
         Ok(())
@@ -177,21 +189,21 @@ mod tests {
     #[test_case("8/8/8/8/8/5k2/6q1/7K w - - 0 1".parse().unwrap() => Some(0.0); "black won")]
     #[test_case("6k1/8/5Q1K/8/8/8/8/8 b - - 0 1".parse().unwrap() => Some(0.5); "stalemate")]
     #[test_case("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 100 1".parse().unwrap() => Some(0.5); "halfmove clock")]
-    fn set_result_tests(game: Game) -> Option<f32> {
+    fn set_result_tests(game: Game) -> Option<f64> {
         game.result
     }
 
     #[test]
     fn repetition_test() {
         let mut game = Game::default();
-        let _ = game.make_move(Move::new(6.into(), 21.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(62.into(), 45.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(21.into(), 6.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(45.into(), 62.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(6.into(), 21.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(62.into(), 45.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(21.into(), 6.into(), Type::Quiet));
-        let _ = game.make_move(Move::new(45.into(), 62.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(6.into(), 21.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(62.into(), 45.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(21.into(), 6.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(45.into(), 62.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(6.into(), 21.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(62.into(), 45.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(21.into(), 6.into(), Type::Quiet));
+        let _ = game.make_move_inner::<false>(Move::new(45.into(), 62.into(), Type::Quiet));
         assert_eq!(game.result, Some(0.5));
     }
 }

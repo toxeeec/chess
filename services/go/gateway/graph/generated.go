@@ -8,9 +8,9 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
@@ -37,24 +37,42 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Mutation() MutationResolver
 	Query() QueryResolver
+	Subscription() SubscriptionResolver
 }
 
 type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
-	PingResponse struct {
-		Text func(childComplexity int) int
+	JoinGameResponse struct {
+		Fen    func(childComplexity int) int
+		Moves  func(childComplexity int) int
+		Result func(childComplexity int) int
+	}
+
+	Mutation struct {
+		MakeMove func(childComplexity int, input model.MakeMoveInput) int
 	}
 
 	Query struct {
-		Ping func(childComplexity int, input model.PingInput) int
+		Placeholder func(childComplexity int) int
+	}
+
+	Subscription struct {
+		JoinGame func(childComplexity int) int
 	}
 }
 
+type MutationResolver interface {
+	MakeMove(ctx context.Context, input model.MakeMoveInput) (*string, error)
+}
 type QueryResolver interface {
-	Ping(ctx context.Context, input model.PingInput) (model.PingResponse, error)
+	Placeholder(ctx context.Context) (*string, error)
+}
+type SubscriptionResolver interface {
+	JoinGame(ctx context.Context) (<-chan model.JoinGameResponse, error)
 }
 
 type executableSchema struct {
@@ -72,24 +90,52 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 	_ = ec
 	switch typeName + "." + field {
 
-	case "PingResponse.text":
-		if e.complexity.PingResponse.Text == nil {
+	case "JoinGameResponse.fen":
+		if e.complexity.JoinGameResponse.Fen == nil {
 			break
 		}
 
-		return e.complexity.PingResponse.Text(childComplexity), true
+		return e.complexity.JoinGameResponse.Fen(childComplexity), true
 
-	case "Query.ping":
-		if e.complexity.Query.Ping == nil {
+	case "JoinGameResponse.moves":
+		if e.complexity.JoinGameResponse.Moves == nil {
 			break
 		}
 
-		args, err := ec.field_Query_ping_args(context.TODO(), rawArgs)
+		return e.complexity.JoinGameResponse.Moves(childComplexity), true
+
+	case "JoinGameResponse.result":
+		if e.complexity.JoinGameResponse.Result == nil {
+			break
+		}
+
+		return e.complexity.JoinGameResponse.Result(childComplexity), true
+
+	case "Mutation.makeMove":
+		if e.complexity.Mutation.MakeMove == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_makeMove_args(context.TODO(), rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Query.Ping(childComplexity, args["input"].(model.PingInput)), true
+		return e.complexity.Mutation.MakeMove(childComplexity, args["input"].(model.MakeMoveInput)), true
+
+	case "Query.placeholder":
+		if e.complexity.Query.Placeholder == nil {
+			break
+		}
+
+		return e.complexity.Query.Placeholder(childComplexity), true
+
+	case "Subscription.joinGame":
+		if e.complexity.Subscription.JoinGame == nil {
+			break
+		}
+
+		return e.complexity.Subscription.JoinGame(childComplexity), true
 
 	}
 	return 0, false
@@ -99,7 +145,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	rc := graphql.GetOperationContext(ctx)
 	ec := executionContext{rc, e}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
-		ec.unmarshalInputPingInput,
+		ec.unmarshalInputMakeMoveInput,
 	)
 	first := true
 
@@ -113,6 +159,38 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Query(ctx, rc.Operation.SelectionSet)
 			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Mutation:
+		return func(ctx context.Context) *graphql.Response {
+			if !first {
+				return nil
+			}
+			first = false
+			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
+			data := ec._Mutation(ctx, rc.Operation.SelectionSet)
+			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, rc.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
 			data.MarshalGQL(&buf)
 
 			return &graphql.Response{
@@ -144,7 +222,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(parsedSchema, parsedSchema.Types[name]), nil
 }
 
-//go:embed "schema.graphqls"
+//go:embed "schema.graphql"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -156,13 +234,28 @@ func sourceData(filename string) string {
 }
 
 var sources = []*ast.Source{
-	{Name: "schema.graphqls", Input: sourceData("schema.graphqls"), BuiltIn: false},
+	{Name: "schema.graphql", Input: sourceData("schema.graphql"), BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Mutation_makeMove_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 model.MakeMoveInput
+	if tmp, ok := rawArgs["input"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+		arg0, err = ec.unmarshalNMakeMoveInput2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐMakeMoveInput(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["input"] = arg0
+	return args, nil
+}
 
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
@@ -176,21 +269,6 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		}
 	}
 	args["name"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_ping_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
-	var err error
-	args := map[string]interface{}{}
-	var arg0 model.PingInput
-	if tmp, ok := rawArgs["input"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalNPingInput2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐPingInput(ctx, tmp)
-		if err != nil {
-			return nil, err
-		}
-	}
-	args["input"] = arg0
 	return args, nil
 }
 
@@ -232,8 +310,8 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
-func (ec *executionContext) _PingResponse_text(ctx context.Context, field graphql.CollectedField, obj *model.PingResponse) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_PingResponse_text(ctx, field)
+func (ec *executionContext) _JoinGameResponse_fen(ctx context.Context, field graphql.CollectedField, obj *model.JoinGameResponse) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JoinGameResponse_fen(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -246,7 +324,7 @@ func (ec *executionContext) _PingResponse_text(ctx context.Context, field graphq
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Text, nil
+		return obj.Fen, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -263,9 +341,9 @@ func (ec *executionContext) _PingResponse_text(ctx context.Context, field graphq
 	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_PingResponse_text(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_JoinGameResponse_fen(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "PingResponse",
+		Object:     "JoinGameResponse",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -276,8 +354,8 @@ func (ec *executionContext) fieldContext_PingResponse_text(ctx context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_ping(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Query_ping(ctx, field)
+func (ec *executionContext) _JoinGameResponse_result(ctx context.Context, field graphql.CollectedField, obj *model.JoinGameResponse) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JoinGameResponse_result(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -290,7 +368,48 @@ func (ec *executionContext) _Query_ping(ctx context.Context, field graphql.Colle
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Ping(rctx, fc.Args["input"].(model.PingInput))
+		return obj.Result, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*float64)
+	fc.Result = res
+	return ec.marshalOFloat2ᚖfloat64(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_JoinGameResponse_result(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JoinGameResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JoinGameResponse_moves(ctx context.Context, field graphql.CollectedField, obj *model.JoinGameResponse) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_JoinGameResponse_moves(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Moves, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -302,23 +421,60 @@ func (ec *executionContext) _Query_ping(ctx context.Context, field graphql.Colle
 		}
 		return graphql.Null
 	}
-	res := resTmp.(model.PingResponse)
+	res := resTmp.([]string)
 	fc.Result = res
-	return ec.marshalNPingResponse2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐPingResponse(ctx, field.Selections, res)
+	return ec.marshalNString2ᚕstringᚄ(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Query_ping(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_JoinGameResponse_moves(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "Query",
+		Object:     "JoinGameResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_makeMove(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_makeMove(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().MakeMove(rctx, fc.Args["input"].(model.MakeMoveInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_makeMove(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
 		Field:      field,
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "text":
-				return ec.fieldContext_PingResponse_text(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PingResponse", field.Name)
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	defer func() {
@@ -328,9 +484,50 @@ func (ec *executionContext) fieldContext_Query_ping(ctx context.Context, field g
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_ping_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_makeMove_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_placeholder(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_placeholder(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Placeholder(rctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_placeholder(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -459,6 +656,72 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_joinGame(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_joinGame(ctx, field)
+	if err != nil {
+		return nil
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().JoinGame(rctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return nil
+	}
+	return func(ctx context.Context) graphql.Marshaler {
+		select {
+		case res, ok := <-resTmp.(<-chan model.JoinGameResponse):
+			if !ok {
+				return nil
+			}
+			return graphql.WriterFunc(func(w io.Writer) {
+				w.Write([]byte{'{'})
+				graphql.MarshalString(field.Alias).MarshalGQL(w)
+				w.Write([]byte{':'})
+				ec.marshalNJoinGameResponse2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐJoinGameResponse(ctx, field.Selections, res).MarshalGQL(w)
+				w.Write([]byte{'}'})
+			})
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (ec *executionContext) fieldContext_Subscription_joinGame(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fen":
+				return ec.fieldContext_JoinGameResponse_fen(ctx, field)
+			case "result":
+				return ec.fieldContext_JoinGameResponse_result(ctx, field)
+			case "moves":
+				return ec.fieldContext_JoinGameResponse_moves(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type JoinGameResponse", field.Name)
 		},
 	}
 	return fc, nil
@@ -2237,25 +2500,25 @@ func (ec *executionContext) fieldContext___Type_specifiedByURL(ctx context.Conte
 
 // region    **************************** input.gotpl *****************************
 
-func (ec *executionContext) unmarshalInputPingInput(ctx context.Context, obj interface{}) (model.PingInput, error) {
-	var it model.PingInput
+func (ec *executionContext) unmarshalInputMakeMoveInput(ctx context.Context, obj interface{}) (model.MakeMoveInput, error) {
+	var it model.MakeMoveInput
 	asMap := map[string]interface{}{}
 	for k, v := range obj.(map[string]interface{}) {
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"text"}
+	fieldsInOrder := [...]string{"move"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "text":
+		case "move":
 			var err error
 
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("text"))
-			it.Text, err = ec.unmarshalNString2string(ctx, v)
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("move"))
+			it.Move, err = ec.unmarshalNString2string(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -2273,23 +2536,70 @@ func (ec *executionContext) unmarshalInputPingInput(ctx context.Context, obj int
 
 // region    **************************** object.gotpl ****************************
 
-var pingResponseImplementors = []string{"PingResponse"}
+var joinGameResponseImplementors = []string{"JoinGameResponse"}
 
-func (ec *executionContext) _PingResponse(ctx context.Context, sel ast.SelectionSet, obj *model.PingResponse) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, pingResponseImplementors)
+func (ec *executionContext) _JoinGameResponse(ctx context.Context, sel ast.SelectionSet, obj *model.JoinGameResponse) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, joinGameResponseImplementors)
 	out := graphql.NewFieldSet(fields)
 	var invalids uint32
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("PingResponse")
-		case "text":
+			out.Values[i] = graphql.MarshalString("JoinGameResponse")
+		case "fen":
 
-			out.Values[i] = ec._PingResponse_text(ctx, field, obj)
+			out.Values[i] = ec._JoinGameResponse_fen(ctx, field, obj)
 
 			if out.Values[i] == graphql.Null {
 				invalids++
 			}
+		case "result":
+
+			out.Values[i] = ec._JoinGameResponse_result(ctx, field, obj)
+
+		case "moves":
+
+			out.Values[i] = ec._JoinGameResponse_moves(ctx, field, obj)
+
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var mutationImplementors = []string{"Mutation"}
+
+func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mutationImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Mutation",
+	})
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		innerCtx := graphql.WithRootFieldContext(ctx, &graphql.RootFieldContext{
+			Object: field.Name,
+			Field:  field,
+		})
+
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Mutation")
+		case "makeMove":
+
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_makeMove(ctx, field)
+			})
+
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -2320,7 +2630,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
-		case "ping":
+		case "placeholder":
 			field := field
 
 			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
@@ -2329,10 +2639,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_ping(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&invalids, 1)
-				}
+				res = ec._Query_placeholder(ctx, field)
 				return res
 			}
 
@@ -2364,6 +2671,26 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		return graphql.Null
 	}
 	return out
+}
+
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		ec.Errorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "joinGame":
+		return ec._Subscription_joinGame(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
 }
 
 var __DirectiveImplementors = []string{"__Directive"}
@@ -2699,13 +3026,13 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) unmarshalNPingInput2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐPingInput(ctx context.Context, v interface{}) (model.PingInput, error) {
-	res, err := ec.unmarshalInputPingInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
+func (ec *executionContext) marshalNJoinGameResponse2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐJoinGameResponse(ctx context.Context, sel ast.SelectionSet, v model.JoinGameResponse) graphql.Marshaler {
+	return ec._JoinGameResponse(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNPingResponse2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐPingResponse(ctx context.Context, sel ast.SelectionSet, v model.PingResponse) graphql.Marshaler {
-	return ec._PingResponse(ctx, sel, &v)
+func (ec *executionContext) unmarshalNMakeMoveInput2githubᚗcomᚋtoxeeecᚋchessᚋservicesᚋgoᚋgatewayᚋgraphᚋmodelᚐMakeMoveInput(ctx context.Context, v interface{}) (model.MakeMoveInput, error) {
+	res, err := ec.unmarshalInputMakeMoveInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v interface{}) (string, error) {
@@ -2721,6 +3048,38 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNString2ᚕstringᚄ(ctx context.Context, v interface{}) ([]string, error) {
+	var vSlice []interface{}
+	if v != nil {
+		vSlice = graphql.CoerceList(v)
+	}
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
@@ -3000,6 +3359,22 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	}
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOFloat2ᚖfloat64(ctx context.Context, v interface{}) (*float64, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel ast.SelectionSet, v *float64) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	res := graphql.MarshalFloatContext(*v)
+	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v interface{}) (*string, error) {

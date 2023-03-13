@@ -1,8 +1,6 @@
-# Where are all the schema files located? globs are supported eg  src/**/*.graphqls
 schema:
-  - graph/*.graphqls
+  - graph/*.graphql
 
-# Where should the generated server code go?
 exec:
   filename: graph/generated.go
   package: graph
@@ -16,7 +14,6 @@ resolver:
   dir: graph
   package: graph
 
-# struct_fields_always_pointers: true
 resolvers_always_return_pointers: false
 
 models:

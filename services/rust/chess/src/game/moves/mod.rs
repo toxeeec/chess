@@ -14,6 +14,7 @@ mod bishop;
 mod checkmask;
 mod king;
 mod knight;
+pub mod list;
 mod magics;
 mod pawn;
 mod pins;
@@ -98,7 +99,7 @@ impl Display for Move {
             self.to(),
             self.typ()
                 .promotion_piece()
-                .map_or(String::new(), |p| p.to_string())
+                .map_or(String::new(), |p| char::from(p).to_string())
         )
     }
 }
@@ -117,10 +118,10 @@ impl Debug for Move {
 
 // returns if king is currently in check
 pub fn generate(game: &mut Game) -> bool {
-    game.moves.clear();
+    game.list.0.clear();
     let state = game.state;
     let board = &game.board;
-    let list = &mut game.moves;
+    let list = &mut game.list;
     let (checkmask, banned) = checkmask_and_banned(state.white, board);
     king(board, state, list, banned);
     if checkmask.is_empty() {
