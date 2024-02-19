@@ -32,7 +32,7 @@ impl fmt::Debug for Board {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         const PIECES: [char; 12] = ['p', 'r', 'n', 'b', 'q', 'k', 'P', 'R', 'N', 'B', 'Q', 'K'];
 
-        (0..64)
+        Bitboard::FULL
             .map(|sq| {
                 self.pieces
                     .iter()

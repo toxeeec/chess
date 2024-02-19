@@ -1,11 +1,12 @@
+use crate::square::Square;
 use std::marker::ConstParamTy;
 
 #[derive(Copy, Clone, Default, Debug)]
 #[derive_const(PartialEq)]
-pub(super) struct Bitboard(u64);
+pub(super) struct Bitboard(pub(super) u64);
 
-#[derive(ConstParamTy, PartialEq, Eq)]
-enum Direction {
+#[derive(Clone, Copy, ConstParamTy, PartialEq, Eq)]
+pub(super) enum Direction {
     North = 8,
     East = 1,
     South = -8,
@@ -27,11 +28,11 @@ enum Direction {
 #[macro_export]
 macro_rules! bb {
     ($square: expr) => {
-        $crate::bitboard::Bitboard::from_square($square)
+        $crate::bitboard::Bitboard::from_square($crate::square::Square::new($square))
     };
 
     ($($square: expr),* $(,)?) => {
-        $crate::bitboard::Bitboard::from_squares([$($square,)*])
+        $crate::bitboard::Bitboard::from_squares([$($crate::square::Square::new($square),)*])
     };
 }
 
@@ -76,30 +77,31 @@ const KNIGHT_LOOKUP: [Bitboard; 64] = {
 };
 
 impl Bitboard {
-    const EMPTY: Self = Self(0);
-    const FILE_A: Self = bb![0, 8, 16, 24, 32, 40, 48, 56];
+    pub(super) const EMPTY: Self = Self(0);
+    pub(super) const FULL: Self = Self(!0);
+    pub(super) const FILE_A: Self = bb![0, 8, 16, 24, 32, 40, 48, 56];
     const FILE_B: Self = Self::FILE_A.shl(1);
     const FILE_G: Self = Self::FILE_A.shl(6);
-    const FILE_H: Self = Self::FILE_A.shl(7);
+    pub(super) const FILE_H: Self = Self::FILE_A.shl(7);
+
+    pub(super) const RANK_1: Self = bb![0, 1, 2, 3, 4, 5, 6, 7];
+    pub(super) const RANK_8: Self = Self::RANK_1.shl(8 * 7);
 
     #[inline(always)]
-    pub(super) const fn contains(self, square: u32) -> bool {
-        debug_assert!(square < 64);
-        self.0 & Self::from_square(square).0 != 0
+    pub(super) const fn contains(self, square: Square) -> bool {
+        self.and(Self::from_square(square)) != Bitboard::EMPTY
     }
 
     #[inline(always)]
-    pub(super) const fn from_square(square: u32) -> Self {
-        debug_assert!(square < 64);
-        Self(1 << square)
+    pub(super) const fn from_square(square: Square) -> Self {
+        Self(1 << square.0)
     }
 
     #[inline(always)]
-    pub(super) const fn from_squares<const N: usize>(squares: [u32; N]) -> Self {
+    pub(super) const fn from_squares<const N: usize>(squares: [Square; N]) -> Self {
         let mut bb = Self::EMPTY;
         let mut i = 0;
         while i < N {
-            debug_assert!(squares[i] < 64);
             bb = bb.with_square(squares[i]);
             i += 1;
         }
@@ -108,18 +110,22 @@ impl Bitboard {
     }
 
     #[inline(always)]
-    const fn with_square(self, square: u32) -> Self {
-        debug_assert!(square < 64);
+    pub(super) const fn with_square(self, square: Square) -> Self {
         Self(self.0 | Self::from_square(square).0)
     }
 
     #[inline(always)]
-    const fn or(self, rhs: Self) -> Self {
+    pub(super) const fn and(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
+
+    #[inline(always)]
+    pub(super) const fn or(self, rhs: Self) -> Self {
         Self(self.0 | rhs.0)
     }
 
     #[inline(always)]
-    const fn xor(self, rhs: Self) -> Self {
+    pub(super) const fn xor(self, rhs: Self) -> Self {
         Self(self.0 & !rhs.0)
     }
 
@@ -152,6 +158,53 @@ impl Bitboard {
             Direction::Sww => (self.xor(Self::FILE_A.or(Self::FILE_B))).shr(10),
             Direction::Nww => (self.xor(Self::FILE_A.or(Self::FILE_B))).shl(6),
             Direction::Nnw => (self.xor(Self::FILE_A)).shl(15),
+        }
+    }
+
+    #[inline(always)]
+    pub(super) const fn rank(sq: Square) -> Self {
+        Self::RANK_1.shl(8 * (sq.rank()))
+    }
+
+    #[inline(always)]
+    pub(super) const fn file(sq: Square) -> Self {
+        Self::FILE_A.shl(sq.file())
+    }
+}
+
+impl Iterator for Bitboard {
+    type Item = Square;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.is_empty() {
+            true => None,
+            false => {
+                let sq = Square::new(self.0.trailing_zeros());
+                self.0 &= self.0 - 1;
+                Some(sq)
+            }
+        }
+    }
+}
+
+impl ExactSizeIterator for Bitboard {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.0.count_ones() as usize
+    }
+}
+
+impl DoubleEndedIterator for Bitboard {
+    #[inline(always)]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.is_empty() {
+            true => None,
+            false => {
+                let sq = Square::new(64 - self.0.leading_zeros() - 1);
+                self.0 &= (1 << (64 - self.0.leading_zeros() - 1)) - 1;
+                Some(sq)
+            }
         }
     }
 }
