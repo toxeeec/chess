@@ -1,7 +1,7 @@
 use crate::square::Square;
-use std::marker::ConstParamTy;
+use std::{fmt, marker::ConstParamTy};
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default)]
 #[derive_const(PartialEq)]
 pub(super) struct Bitboard(pub(super) u64);
 
@@ -206,6 +206,19 @@ impl DoubleEndedIterator for Bitboard {
                 Some(sq)
             }
         }
+    }
+}
+
+impl fmt::Debug for Bitboard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        format!("{:064b}", self.0.reverse_bits())
+            .chars()
+            .array_chunks::<8>()
+            .collect::<Vec<_>>()
+            .iter()
+            .rev()
+            .map(|row| String::from_iter(row.iter().intersperse(&' ')))
+            .try_for_each(|row| writeln!(f, "{row}"))
     }
 }
 
