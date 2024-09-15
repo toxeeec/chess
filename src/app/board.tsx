@@ -2,9 +2,13 @@ import { ReactNode } from "react"
 
 export function Board({ children }: { children?: ReactNode }) {
 	return (
-		<div className="w-board relative aspect-square">
+		<div className="w-board relative grid aspect-square grid-cols-8 grid-rows-8">
 			{children}
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" className="absolute inset-0">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 8 8"
+				className="absolute inset-0 -z-10"
+			>
 				<path className="fill-neutral-700" d="M0 0h8v8H0" />
 				<path
 					className="fill-neutral-400"
