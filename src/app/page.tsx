@@ -1,3 +1,9 @@
+import { Board } from "./board"
+
 export default function Home() {
-	return <div></div>
+	return (
+		<div className="grid h-full place-items-center">
+			<Board />
+		</div>
+	)
 }

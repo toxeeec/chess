@@ -3,7 +3,11 @@ import type { Config } from "tailwindcss"
 const config: Config = {
 	content: ["./src/app/**/*.{ts,tsx}"],
 	theme: {
-		extend: {},
+		extend: {
+			width: {
+				board: "var(--board-width)",
+			},
+		},
 	},
 	plugins: [],
 }
