@@ -9,9 +9,10 @@
 		"lint": "next lint"
 	},
 	"dependencies": {
+		"babel-plugin-react-compiler": "^0.0.0-experimental-de2cfda-20240912",
+		"next": "15.0.0-canary.155",
 		"react": "19.0.0-rc-206df66e-20240912",
-		"react-dom": "19.0.0-rc-206df66e-20240912",
-		"next": "15.0.0-canary.155"
+		"react-dom": "19.0.0-rc-206df66e-20240912"
 	},
 	"devDependencies": {
 		"@trivago/prettier-plugin-sort-imports": "^4.3.0",
@@ -21,6 +22,7 @@
 		"eslint": "^8",
 		"eslint-config-next": "15.0.0-canary.155",
 		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-react-compiler": "^0.0.0-experimental-75b9fd4-20240912",
 		"postcss": "^8",
 		"prettier": "^3.3.3",
 		"prettier-plugin-tailwindcss": "^0.6.6",
