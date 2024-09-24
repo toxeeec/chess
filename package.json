@@ -9,10 +9,13 @@
 		"lint": "next lint"
 	},
 	"dependencies": {
+		"@dnd-kit/core": "^6.1.0",
+		"@dnd-kit/modifiers": "^7.0.0",
 		"babel-plugin-react-compiler": "^0.0.0-experimental-de2cfda-20240912",
 		"next": "15.0.0-canary.155",
 		"react": "19.0.0-rc-206df66e-20240912",
-		"react-dom": "19.0.0-rc-206df66e-20240912"
+		"react-dom": "19.0.0-rc-206df66e-20240912",
+		"tailwind-merge": "^2.5.2"
 	},
 	"devDependencies": {
 		"@total-typescript/ts-reset": "^0.6.1",

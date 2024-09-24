@@ -1,3 +1,6 @@
+import { twMerge } from "@/utils"
+import { useDraggable } from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
 import { ComponentProps } from "react"
 
 const PIECE_TYPE = {
@@ -31,7 +34,22 @@ export function Piece({
 	color: PieceColor
 	square: Square
 }) {
-	return <div style={getPieceStyle(type, color, square)} />
+	const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+		id: square,
+	})
+
+	return (
+		<button
+			{...listeners}
+			{...attributes}
+			className={twMerge(isDragging && "cursor-grabbing")}
+			ref={setNodeRef}
+			style={{
+				...getPieceStyle(type, color, square),
+				transform: CSS.Translate.toString(transform),
+			}}
+		/>
+	)
 }
 
 function getPieceStyle(type: PieceType, color: PieceColor, square: Square) {
