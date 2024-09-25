@@ -19,4 +19,8 @@ export namespace Square {
 
 		return `${FILES[file]}${RANKS[rank]}` as Square
 	}
+
+	export function gridArea(square: Square) {
+		return `${Square.rank(square) + 1}/${Square.file(square) + 1}`
+	}
 }

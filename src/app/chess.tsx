@@ -68,8 +68,7 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 			ref={setNodeRef}
 			style={{
 				backgroundImage: `url(${Piece.imagePath(piece)})`,
-				gridColumn: Square.file(square) + 1,
-				gridRow: Square.rank(square) + 1,
+				gridArea: Square.gridArea(square),
 				transform: CSS.Translate.toString(transform),
 			}}
 		/>
@@ -78,13 +77,5 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 
 function DroppableSquare({ square }: { square: Square }) {
 	const { setNodeRef } = useDroppable({ id: square })
-	return (
-		<div
-			ref={setNodeRef}
-			style={{
-				gridColumn: Square.file(square) + 1,
-				gridRow: Square.rank(square) + 1,
-			}}
-		></div>
-	)
+	return <div ref={setNodeRef} style={{ gridArea: Square.gridArea(square) }}></div>
 }
