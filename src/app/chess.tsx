@@ -1,40 +1,36 @@
 "use client"
 
-import { Piece, FILES } from "./piece"
-import { DndContext } from "@dnd-kit/core"
+import { Piece } from "./piece"
+import { Square, SQUARES } from "./square"
+import { useChessState } from "./use-chess-state"
+import { twMerge } from "@/utils"
+import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { restrictToParentElement, snapCenterToCursor } from "@dnd-kit/modifiers"
+import { CSS } from "@dnd-kit/utilities"
 import { ReactNode, useId } from "react"
 
 export function Chess() {
+	const { pieces, movePiece } = useChessState()
 	const id = useId()
 
+	const handleDragEnd = (e: DragEndEvent) => {
+		if (!e.over) return
+		movePiece(e.active.id as Square, e.over.id as Square)
+	}
+
 	return (
-		<DndContext id={id} modifiers={[snapCenterToCursor, restrictToParentElement]}>
+		<DndContext
+			id={id}
+			modifiers={[snapCenterToCursor, restrictToParentElement]}
+			onDragEnd={handleDragEnd}
+		>
 			<Board>
-				<Piece type="ROOK" color="BLACK" square="A8" />
-				<Piece type="KNIGHT" color="BLACK" square="B8" />
-				<Piece type="BISHOP" color="BLACK" square="C8" />
-				<Piece type="QUEEN" color="BLACK" square="D8" />
-				<Piece type="KING" color="BLACK" square="E8" />
-				<Piece type="BISHOP" color="BLACK" square="F8" />
-				<Piece type="KNIGHT" color="BLACK" square="G8" />
-				<Piece type="ROOK" color="BLACK" square="H8" />
-
-				{FILES.map((file) => (
-					<Piece key={file} type="PAWN" color="BLACK" square={`${file}7`} />
+				{pieces.map(([square, piece]) => (
+					<DraggablePiece key={square} square={square as Square} piece={piece} />
 				))}
-				{FILES.map((file) => (
-					<Piece key={file} type="PAWN" color="WHITE" square={`${file}2`} />
+				{SQUARES.map((square) => (
+					<DroppableSquare key={square} square={square} />
 				))}
-
-				<Piece type="ROOK" color="WHITE" square="A1" />
-				<Piece type="KNIGHT" color="WHITE" square="B1" />
-				<Piece type="BISHOP" color="WHITE" square="C1" />
-				<Piece type="QUEEN" color="WHITE" square="D1" />
-				<Piece type="KING" color="WHITE" square="E1" />
-				<Piece type="BISHOP" color="WHITE" square="F1" />
-				<Piece type="KNIGHT" color="WHITE" square="G1" />
-				<Piece type="ROOK" color="WHITE" square="H1" />
 			</Board>
 		</DndContext>
 	)
@@ -56,5 +52,39 @@ function Board({ children }: { children: ReactNode }) {
 				/>
 			</svg>
 		</div>
+	)
+}
+
+function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
+	const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+		id: square,
+	})
+
+	return (
+		<button
+			{...listeners}
+			{...attributes}
+			className={twMerge("z-10", isDragging && "z-20 cursor-grabbing")}
+			ref={setNodeRef}
+			style={{
+				backgroundImage: `url(${Piece.imagePath(piece)})`,
+				gridColumn: Square.file(square) + 1,
+				gridRow: Square.rank(square) + 1,
+				transform: CSS.Translate.toString(transform),
+			}}
+		/>
+	)
+}
+
+function DroppableSquare({ square }: { square: Square }) {
+	const { setNodeRef } = useDroppable({ id: square })
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				gridColumn: Square.file(square) + 1,
+				gridRow: Square.rank(square) + 1,
+			}}
+		></div>
 	)
 }

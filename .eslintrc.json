@@ -2,6 +2,7 @@
 	"extends": ["next/core-web-vitals", "next/typescript", "prettier"],
 	"plugins": ["react-compiler"],
 	"rules": {
-		"react-compiler/react-compiler": "error"
+		"react-compiler/react-compiler": "error",
+		"@typescript-eslint/no-namespace": "off"
 	}
 }
