@@ -1,10 +1,11 @@
 import { Piece } from "./piece"
 import { Square } from "./square"
+import { useElementSize } from "@/hooks"
 import { useState } from "react"
 
 type Position = Partial<Record<Square, Piece>>
 
-export function useChessState() {
+export function useChess() {
 	const [position, setPosition] = useState<Position>(STARTING_POSITION)
 	const pieces = Object.entries(position) as ReadonlyArray<readonly [Square, Piece]>
 
@@ -19,7 +20,10 @@ export function useChessState() {
 		})
 	}
 
-	return { pieces, movePiece }
+	const { ref: boardRef, dimensions } = useElementSize()
+	const squareSize = dimensions.width / 8
+
+	return { pieces, movePiece, boardRef, squareSize }
 }
 
 const STARTING_POSITION = {

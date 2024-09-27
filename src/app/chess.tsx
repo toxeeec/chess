@@ -2,15 +2,15 @@
 
 import { Piece } from "./piece"
 import { Square, SQUARES } from "./square"
-import { useChessState } from "./use-chess-state"
+import { useChess } from "./use-chess"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { restrictToParentElement, snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
-import { ReactNode, useId } from "react"
+import { ReactNode, RefCallback, useId } from "react"
 import { twJoin } from "tailwind-merge"
 
 export function Chess() {
-	const { pieces, movePiece } = useChessState()
+	const { pieces, movePiece, boardRef, squareSize } = useChess()
 	const id = useId()
 
 	const handleDragEnd = (e: DragEndEvent) => {
@@ -24,21 +24,21 @@ export function Chess() {
 			modifiers={[snapCenterToCursor, restrictToParentElement]}
 			onDragEnd={handleDragEnd}
 		>
-			<Board>
+			<Board ref={boardRef}>
 				{pieces.map(([square, piece]) => (
 					<DraggablePiece key={square} square={square as Square} piece={piece} />
 				))}
 				{SQUARES.map((square) => (
-					<DroppableSquare key={square} square={square} />
+					<DroppableSquare key={square} square={square} size={squareSize} />
 				))}
 			</Board>
 		</DndContext>
 	)
 }
 
-function Board({ children }: { children: ReactNode }) {
+function Board({ children, ref }: { children: ReactNode; ref: RefCallback<HTMLDivElement> }) {
 	return (
-		<div className="relative grid size-board grid-cols-8 grid-rows-8">
+		<div ref={ref} className="relative grid size-board grid-cols-8 grid-rows-8">
 			{children}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
@@ -75,7 +75,14 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 	)
 }
 
-function DroppableSquare({ square }: { square: Square }) {
-	const { setNodeRef } = useDroppable({ id: square })
-	return <div ref={setNodeRef} style={{ gridArea: Square.gridArea(square) }}></div>
+function DroppableSquare({ square, size }: { square: Square; size: number }) {
+	const { isOver, setNodeRef } = useDroppable({ id: square })
+
+	return (
+		<div
+			className={twJoin("border-neutral-500", !isOver && "border-none")}
+			ref={setNodeRef}
+			style={{ gridArea: Square.gridArea(square), borderWidth: 0.05 * size }}
+		></div>
+	)
 }

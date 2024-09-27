@@ -5,19 +5,19 @@ export const SQUARES = FILES.flatMap((file) => RANKS.map((rank) => `${file}${ran
 export type Square = (typeof SQUARES)[number]
 
 export namespace Square {
+	export function fromIndex(index: number) {
+		const file = index % 8
+		const rank = Math.floor(index / 8)
+
+		return `${FILES[file]}${RANKS[rank]}` as Square
+	}
+
 	export function file(square: Square) {
 		return square.charCodeAt(0) - "A".charCodeAt(0)
 	}
 
 	export function rank(square: Square) {
 		return 8 - parseInt(square[1] as string)
-	}
-
-	export function fromIndex(index: number) {
-		const file = index % 8
-		const rank = Math.floor(index / 8)
-
-		return `${FILES[file]}${RANKS[rank]}` as Square
 	}
 
 	export function gridArea(square: Square) {
