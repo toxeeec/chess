@@ -4,8 +4,8 @@ const config: Config = {
 	content: ["./src/app/**/*.{ts,tsx}"],
 	theme: {
 		extend: {
-			width: {
-				board: "var(--board-width)",
+			size: {
+				board: "var(--board-size)",
 			},
 		},
 	},

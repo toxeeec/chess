@@ -5,5 +5,5 @@
 :root {
 	/* https://stackoverflow.com/questions/37754542/css-calc-round-down-with-two-decimal-cases/64921523#64921523 */
 	--shf: 4.9406564584124654e-324;
-	--board-width: calc(min(100dvw, 100dvh) / 8 * var(--shf) / var(--shf) * 8);
+	--board-size: calc(min(100dvw, 100dvh) / 8 * var(--shf) / var(--shf) * 8);
 }

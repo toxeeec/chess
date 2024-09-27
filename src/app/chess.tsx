@@ -38,7 +38,7 @@ export function Chess() {
 
 function Board({ children }: { children: ReactNode }) {
 	return (
-		<div className="relative grid aspect-square w-board grid-cols-8 grid-rows-8">
+		<div className="relative grid size-board grid-cols-8 grid-rows-8">
 			{children}
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
