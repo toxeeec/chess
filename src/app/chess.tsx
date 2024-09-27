@@ -3,11 +3,11 @@
 import { Piece } from "./piece"
 import { Square, SQUARES } from "./square"
 import { useChessState } from "./use-chess-state"
-import { twMerge } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { restrictToParentElement, snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
 import { ReactNode, useId } from "react"
+import { twJoin } from "tailwind-merge"
 
 export function Chess() {
 	const { pieces, movePiece } = useChessState()
@@ -64,7 +64,7 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 		<button
 			{...listeners}
 			{...attributes}
-			className={twMerge("z-10", isDragging && "z-20 cursor-grabbing")}
+			className={twJoin("z-10", isDragging && "z-20 cursor-grabbing")}
 			ref={setNodeRef}
 			style={{
 				backgroundImage: `url(${Piece.imagePath(piece)})`,
