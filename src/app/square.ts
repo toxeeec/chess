@@ -21,6 +21,10 @@ export namespace Square {
 	}
 
 	export function gridArea(square: Square) {
-		return `${Square.rank(square) + 1}/${Square.file(square) + 1}`
+		return `${rank(square) + 1} / ${file(square) + 1}`
+	}
+
+	export function isLight(square: Square) {
+		return file(square) % 2 === rank(square) % 2
 	}
 }

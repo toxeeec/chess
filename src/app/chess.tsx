@@ -6,7 +6,7 @@ import { useChess } from "./use-chess"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { restrictToParentElement, snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
-import { ReactNode, RefCallback, useId } from "react"
+import { useId } from "react"
 import { twJoin } from "tailwind-merge"
 
 export function Chess() {
@@ -24,34 +24,15 @@ export function Chess() {
 			modifiers={[snapCenterToCursor, restrictToParentElement]}
 			onDragEnd={handleDragEnd}
 		>
-			<Board ref={boardRef}>
+			<div ref={boardRef} className="relative grid size-board grid-cols-8 grid-rows-8">
 				{pieces.map(([square, piece]) => (
 					<DraggablePiece key={square} square={square as Square} piece={piece} />
 				))}
 				{SQUARES.map((square) => (
 					<DroppableSquare key={square} square={square} size={squareSize} />
 				))}
-			</Board>
+			</div>
 		</DndContext>
-	)
-}
-
-function Board({ children, ref }: { children: ReactNode; ref: RefCallback<HTMLDivElement> }) {
-	return (
-		<div ref={ref} className="relative grid size-board grid-cols-8 grid-rows-8">
-			{children}
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 8 8"
-				className="absolute inset-0 -z-10"
-			>
-				<path className="fill-neutral-700" d="M0 0h8v8H0" />
-				<path
-					className="fill-neutral-400"
-					d="M0 0h8v1H0m0 1h8v1H0m0 1h8v1H0m0 1h8v1H0m1-7v8h1V0m1 0v8h1V0m1 0v8h1V0m1 0v8h1V0"
-				/>
-			</svg>
-		</div>
 	)
 }
 
@@ -78,9 +59,15 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 function DroppableSquare({ square, size }: { square: Square; size: number }) {
 	const { isOver, setNodeRef } = useDroppable({ id: square })
 
+	const isLight = Square.isLight(square)
+
 	return (
 		<div
-			className={twJoin("border-neutral-500", !isOver && "border-none")}
+			className={twJoin(
+				"border-neutral-500",
+				isLight ? "bg-neutral-400" : "bg-neutral-700",
+				!isOver && "border-none",
+			)}
 			ref={setNodeRef}
 			style={{ gridArea: Square.gridArea(square), borderWidth: 0.05 * size }}
 		></div>
