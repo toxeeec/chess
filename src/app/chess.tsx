@@ -10,7 +10,7 @@ import { useId } from "react"
 import { twJoin } from "tailwind-merge"
 
 export function Chess() {
-	const { pieces, movePiece, boardRef, squareSize } = useChess()
+	const { pieces, movePiece, boardRef } = useChess()
 	const id = useId()
 
 	const handleDragEnd = (e: DragEndEvent) => {
@@ -24,12 +24,12 @@ export function Chess() {
 			modifiers={[snapCenterToCursor, restrictToParentElement]}
 			onDragEnd={handleDragEnd}
 		>
-			<div ref={boardRef} className="relative grid size-board grid-cols-8 grid-rows-8">
+			<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8">
 				{pieces.map(([square, piece]) => (
 					<DraggablePiece key={square} square={square as Square} piece={piece} />
 				))}
 				{SQUARES.map((square) => (
-					<DroppableSquare key={square} square={square} size={squareSize} />
+					<DroppableSquare key={square} square={square} />
 				))}
 			</div>
 		</DndContext>
@@ -56,7 +56,7 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 	)
 }
 
-function DroppableSquare({ square, size }: { square: Square; size: number }) {
+function DroppableSquare({ square }: { square: Square }) {
 	const { isOver, setNodeRef } = useDroppable({ id: square })
 
 	const isLight = Square.isLight(square)
@@ -64,12 +64,12 @@ function DroppableSquare({ square, size }: { square: Square; size: number }) {
 	return (
 		<div
 			className={twJoin(
-				"border-neutral-500",
+				"border-square border-neutral-500",
 				isLight ? "bg-neutral-400" : "bg-neutral-700",
 				!isOver && "border-none",
 			)}
 			ref={setNodeRef}
-			style={{ gridArea: Square.gridArea(square), borderWidth: 0.05 * size }}
+			style={{ gridArea: Square.gridArea(square) }}
 		></div>
 	)
 }

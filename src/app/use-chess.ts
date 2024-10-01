@@ -1,7 +1,7 @@
 import { Piece } from "./piece"
 import { Square } from "./square"
-import { useElementSize } from "@/hooks"
-import { useState } from "react"
+import { useResizeObserver } from "@/hooks"
+import { useRef, useState } from "react"
 
 type Position = Partial<Record<Square, Piece>>
 
@@ -20,10 +20,21 @@ export function useChess() {
 		})
 	}
 
-	const { ref: boardRef, dimensions } = useElementSize()
-	const squareSize = dimensions.width / 8
+	const parentRef = useRef<HTMLElement | null>(null)
+	const boardRef = (el: HTMLElement | null) => {
+		const parent = el?.parentElement
+		if (parent) {
+			parentRef.current = parent
+		}
+	}
 
-	return { pieces, movePiece, boardRef, squareSize }
+	useResizeObserver(parentRef, (entry) => {
+		const { width, height } = entry.target.getBoundingClientRect()
+		const minSize = Math.min(width, height)
+		document.documentElement.style.setProperty("--board-parent-min-size", `${minSize}px`)
+	})
+
+	return { pieces, movePiece, boardRef }
 }
 
 const STARTING_POSITION = {
