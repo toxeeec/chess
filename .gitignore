@@ -1,8 +1,1 @@
-/node_modules
-/.next/
-/out/
-/build
 .DS_Store
-*.pem
-*.tsbuildinfo
-next-env.d.ts
