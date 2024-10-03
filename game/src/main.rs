@@ -9,6 +9,9 @@ use axum::{
 };
 use serde::Deserialize;
 use tokio::{net::TcpListener, sync::RwLock};
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Default, Debug)]
 struct AppState {
@@ -17,11 +20,16 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     let state = Arc::new(AppState::default());
     let app = Router::new()
         .route("/games", post(create_game))
         .route("/games/:id", get(join_game))
-        .with_state(state);
+        .with_state(state)
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
     let listener = TcpListener::bind("127.0.0.1:3001").await.unwrap();
     serve(listener, app).await.unwrap();
 }
