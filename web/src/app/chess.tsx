@@ -3,21 +3,41 @@
 import { Piece } from "./piece"
 import { Square, SQUARES } from "./square"
 import { useChess } from "./use-chess"
+import { GAME_SERVER_URL } from "@/env"
 import { restrictToParentElement } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
-import { useId } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useId } from "react"
+import { io } from "socket.io-client"
 import { twJoin } from "tailwind-merge"
 
-export function Chess() {
+export function Chess({ gameId }: { gameId: string }) {
 	const { pieces, movePiece, boardRef } = useChess()
 	const id = useId()
+	const router = useRouter()
 
 	const handleDragEnd = (e: DragEndEvent) => {
 		if (!e.over) return
 		movePiece(e.active.id as Square, e.over.id as Square)
 	}
+
+	useEffect(() => {
+		const socket = io(GAME_SERVER_URL)
+
+		socket.on("connect", () => {
+			socket.emit("join", gameId)
+		})
+
+		socket.on("message", (e) => {
+			console.log(e)
+		})
+
+		socket.on("disconnect", () => {
+			router.replace("/play")
+		})
+	}, [gameId, router])
 
 	return (
 		<DndContext

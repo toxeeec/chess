@@ -13,10 +13,11 @@
 		"@dnd-kit/modifiers": "^7.0.0",
 		"@paralleldrive/cuid2": "^2.2.2",
 		"babel-plugin-react-compiler": "^0.0.0-experimental-b4db8c3-20241001",
-		"next": "^15.0.0-canary.171",
-		"react": "^19.0.0-rc-67fee58b-20240926",
-		"react-dom": "^19.0.0-rc-67fee58b-20240926",
+		"next": "^15.0.0-canary.178",
+		"react": "^19.0.0-rc-2d16326d-20240930",
+		"react-dom": "^19.0.0-rc-2d16326d-20240930",
 		"server-only": "^0.0.1",
+		"socket.io-client": "^4.8.0",
 		"tailwind-merge": "^2.5.2"
 	},
 	"devDependencies": {
