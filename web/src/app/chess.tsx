@@ -3,7 +3,6 @@
 import { Piece } from "./piece"
 import { Square, SQUARES } from "./square"
 import { useChess } from "./use-chess"
-import { GAME_SERVER_URL } from "@/env"
 import { restrictToParentElement } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { snapCenterToCursor } from "@dnd-kit/modifiers"
@@ -24,7 +23,7 @@ export function Chess({ gameId }: { gameId: string }) {
 	}
 
 	useEffect(() => {
-		const socket = io(GAME_SERVER_URL)
+		const socket = io(process.env.NEXT_PUBLIC_GAME_SERVER_URL)
 
 		socket.on("connect", () => {
 			socket.emit("join", gameId)

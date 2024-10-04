@@ -1,10 +1,9 @@
-import { GAME_SERVER_URL } from "@/env"
 import { createId } from "@paralleldrive/cuid2"
 import "server-only"
 
 export async function createGame() {
 	const id = createId()
-	await fetch(`${GAME_SERVER_URL}/games`, {
+	await fetch(`${process.env.GAME_SERVER_URL}/games`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
