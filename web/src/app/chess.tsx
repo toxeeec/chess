@@ -46,7 +46,7 @@ export function Chess({ gameId }: { gameId: string }) {
 		>
 			<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8">
 				{pieces.map(([square, piece]) => (
-					<DraggablePiece key={square} square={square as Square} piece={piece} />
+					<DraggablePiece key={square} square={square} piece={piece} />
 				))}
 				{SQUARES.map((square) => (
 					<DroppableSquare key={square} square={square} />

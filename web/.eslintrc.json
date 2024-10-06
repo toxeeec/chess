@@ -1,6 +1,14 @@
 {
-	"extends": ["next/core-web-vitals", "next/typescript", "prettier"],
-	"plugins": ["react-compiler"],
+	"extends": [
+		"next/core-web-vitals",
+		"next/typescript",
+		"plugin:drizzle/recommended",
+		"prettier"
+	],
+	"plugins": [
+		"react-compiler",
+		"drizzle"
+	],
 	"rules": {
 		"react-compiler/react-compiler": "error",
 		"@typescript-eslint/no-namespace": "off"
