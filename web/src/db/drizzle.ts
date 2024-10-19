@@ -1,6 +1,7 @@
 import * as schema from "./schema"
 import Database from "better-sqlite3"
 import { drizzle } from "drizzle-orm/better-sqlite3"
+import "server-only"
 
 const sqlite = new Database("chess.db")
 sqlite.pragma("busy_timeout = 5000")
