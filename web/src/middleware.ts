@@ -17,16 +17,20 @@ export async function middleware(request: NextRequest) {
 		})
 		if (!res.ok) {
 			const { error } = (await res.json()) as ErrorResponse
-			console.log(error)
-			// TODO: add error page
+			return NextResponse.redirect(
+				new URL(`/error?status=${res.status}&message=${error}`, request.url),
+			)
 		}
 		const newToken = ((await res.json()) as Token).token
 		const response = NextResponse.next()
 		setToken(response, newToken)
 		return response
 	} catch (e) {
-		console.log(e)
-		// TODO: add error page
+		let url = "/error"
+		if (e instanceof Error) {
+			url += `?message=${e.message}`
+		}
+		return NextResponse.redirect(new URL(url, request.url))
 	}
 }
 
