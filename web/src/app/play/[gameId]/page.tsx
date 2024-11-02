@@ -1,4 +1,4 @@
-import { Chess } from "@/app/chess"
+import { ChessGame } from "@/app/chess-game"
 
 export default async function Game({ params }: { params: Promise<{ gameId: string }> }) {
 	const { gameId } = await params
@@ -6,7 +6,7 @@ export default async function Game({ params }: { params: Promise<{ gameId: strin
 	return (
 		<div className="grid h-full place-items-center">
 			<div className="grid size-4/5 place-items-center">
-				<Chess gameId={gameId} />
+				<ChessGame gameId={gameId} />
 			</div>
 		</div>
 	)

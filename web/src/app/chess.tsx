@@ -7,36 +7,17 @@ import { restrictToParentElement } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
-import { useRouter } from "next/navigation"
-import { useEffect, useId } from "react"
-import { io } from "socket.io-client"
+import { useId } from "react"
 import { twJoin } from "tailwind-merge"
 
-export function Chess({ gameId }: { gameId: string }) {
+export function Chess() {
 	const { pieces, movePiece, boardRef } = useChess()
 	const id = useId()
-	const router = useRouter()
 
 	const handleDragEnd = (e: DragEndEvent) => {
 		if (!e.over) return
 		movePiece(e.active.id as Square, e.over.id as Square)
 	}
-
-	useEffect(() => {
-		const socket = io(process.env.NEXT_PUBLIC_GAME_SERVER_URL)
-
-		socket.on("connect", () => {
-			socket.emit("join", gameId)
-		})
-
-		socket.on("message", (e) => {
-			console.log(e)
-		})
-
-		socket.on("disconnect", () => {
-			router.replace("/play")
-		})
-	}, [gameId, router])
 
 	return (
 		<DndContext
@@ -44,7 +25,10 @@ export function Chess({ gameId }: { gameId: string }) {
 			modifiers={[snapCenterToCursor, restrictToParentElement]}
 			onDragEnd={handleDragEnd}
 		>
-			<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8">
+			<div
+				ref={boardRef}
+				className="grid size-board grid-cols-8 grid-rows-8 overflow-hidden rounded-lg"
+			>
 				{pieces.map(([square, piece]) => (
 					<DraggablePiece key={square} square={square} piece={piece} />
 				))}
