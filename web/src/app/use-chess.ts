@@ -30,7 +30,12 @@ export function useChess() {
 
 	useResizeObserver(parentRef, (entry) => {
 		const { width, height } = entry.target.getBoundingClientRect()
-		const minSize = Math.min(width, height)
+		const { paddingLeft, paddingRight, paddingTop, paddingBottom } = getComputedStyle(
+			entry.target,
+		)
+		const paddingX = parseFloat(paddingLeft) + parseFloat(paddingRight)
+		const paddingY = parseFloat(paddingTop) + parseFloat(paddingBottom)
+		const minSize = Math.min(width - paddingX, height - paddingY)
 		document.documentElement.style.setProperty("--board-parent-min-size", `${minSize}px`)
 	})
 
