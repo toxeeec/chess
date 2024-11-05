@@ -1,4 +1,5 @@
 import { Chess } from "../chess"
+import { Button } from "@/components/button"
 
 export default async function GameLobby() {
 	return (
@@ -6,7 +7,9 @@ export default async function GameLobby() {
 			<div className="grid flex-grow place-items-center px-6">
 				<Chess />
 			</div>
-			<div className="rounded-t-2xl bg-neutral-800 p-6">bottom sheet</div>
+			<div className="flex flex-col rounded-t-[2rem] bg-neutral-800 p-6">
+				<Button className="mt-40">Play</Button>
+			</div>
 		</main>
 	)
 }

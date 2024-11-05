@@ -1,7 +1,8 @@
 import type { Config } from "tailwindcss"
+import racPlugin from "tailwindcss-react-aria-components"
 
 const config: Config = {
-	content: ["./src/app/**/*.{ts,tsx}"],
+	content: ["./src/**/*.{ts,tsx}"],
 	theme: {
 		extend: {
 			borderWidth: {
@@ -12,6 +13,6 @@ const config: Config = {
 			},
 		},
 	},
-	plugins: [],
+	plugins: [racPlugin],
 }
 export default config
