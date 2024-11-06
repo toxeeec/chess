@@ -20,6 +20,7 @@
 		"react": "^19.0.0-rc-2d16326d-20240930",
 		"react-aria-components": "^1.4.1",
 		"react-dom": "^19.0.0-rc-2d16326d-20240930",
+		"react-stately": "^3.33.0",
 		"server-only": "^0.0.1",
 		"socket.io-client": "^4.8.0",
 		"tailwind-merge": "^2.5.2"
