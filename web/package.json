@@ -16,14 +16,18 @@
 		"better-sqlite3": "^11.3.0",
 		"drizzle-orm": "^0.34.1",
 		"jose": "^5.9.3",
+		"lucide-react": "^0.456.0",
 		"next": "15.0.3",
+		"next-safe-action": "^7.9.9",
 		"react": "19.0.0-rc-66855b96-20241106",
 		"react-aria-components": "^1.4.1",
 		"react-dom": "19.0.0-rc-66855b96-20241106",
 		"react-stately": "^3.33.0",
 		"server-only": "^0.0.1",
 		"socket.io-client": "^4.8.0",
-		"tailwind-merge": "^2.5.2"
+		"tailwind-merge": "^2.5.2",
+		"zod": "^3.23.8",
+		"zod-form-data": "^2.0.2"
 	},
 	"devDependencies": {
 		"@total-typescript/ts-reset": "^0.6.1",

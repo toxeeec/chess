@@ -13,13 +13,14 @@ import { SliderState } from "react-stately"
 interface SliderProps extends Omit<RacSliderProps, "className"> {
 	label: string
 	format?: (state: SliderState) => string
+	name?: string
 }
 
-export function Slider({ label, format, ...props }: SliderProps) {
+export function Slider({ label, format, name, ...props }: SliderProps) {
 	return (
 		<RacSlider {...props}>
-			<div className="flex pb-1 font-semibold text-neutral-200">
-				<Label className="flex-1">{label}</Label>
+			<div className="flex justify-between pb-1 font-semibold text-neutral-200">
+				<Label>{label}</Label>
 				{format ? (
 					<SliderOutput>{({ state }) => format(state)}</SliderOutput>
 				) : (
@@ -28,7 +29,10 @@ export function Slider({ label, format, ...props }: SliderProps) {
 			</div>
 			<SliderTrack className="h-5">
 				<div className="absolute top-1/2 h-2 w-full -translate-y-1/2 rounded-full bg-neutral-700"></div>
-				<SliderThumb className="dragging:opacity-90 top-1/2 h-5 w-5 rounded-full bg-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-200" />
+				<SliderThumb
+					name={name}
+					className="dragging:opacity-90 top-1/2 h-6 w-6 rounded-full border-2 border-neutral-800 bg-neutral-200 outline-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-200 disabled:bg-neutral-700"
+				/>
 			</SliderTrack>
 		</RacSlider>
 	)

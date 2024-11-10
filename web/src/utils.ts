@@ -30,7 +30,7 @@ export function composeRenderProps<T extends Parameters<typeof twMerge>[number],
 	return racComposeRenderProps(value, (prevValue) => twMerge(classLists, prevValue) as V)
 }
 
-const twMerge = extendTailwindMerge({
+export const twMerge = extendTailwindMerge({
 	extend: {
 		theme: {
 			borderWidth: ["square"],

@@ -1,5 +1,5 @@
 import { Chess } from "../chess"
-import { BottomSheet } from "./bottom-sheet"
+import { CreateGameForm } from "./create-game-form"
 
 export default async function GameLobby() {
 	return (
@@ -7,7 +7,7 @@ export default async function GameLobby() {
 			<div className="grid flex-grow place-items-center px-6">
 				<Chess />
 			</div>
-			<BottomSheet />
+			<CreateGameForm />
 		</main>
 	)
 }
