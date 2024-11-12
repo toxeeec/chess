@@ -1,3 +1,5 @@
+import { CSSProperties } from "react"
+
 const FILES = ["A", "B", "C", "D", "E", "F", "G", "H"] as const
 const RANKS = [1, 2, 3, 4, 5, 6, 7, 8] as const
 export const SQUARES = FILES.flatMap((file) => RANKS.map((rank) => `${file}${rank}` as const))
@@ -26,5 +28,25 @@ export namespace Square {
 
 	export function isLight(square: Square) {
 		return file(square) % 2 === rank(square) % 2
+	}
+
+	export function borderRadiusStyles(square: Square) {
+		let propertyName: keyof CSSProperties | null = null
+		switch (square) {
+			case "A8":
+				propertyName = "borderTopLeftRadius"
+				break
+			case "H8":
+				propertyName = "borderTopRightRadius"
+				break
+			case "A1":
+				propertyName = "borderBottomLeftRadius"
+				break
+			case "H1":
+				propertyName = "borderBottomRightRadius"
+				break
+		}
+		if (!propertyName) return null
+		return { [propertyName]: "inherit" }
 	}
 }

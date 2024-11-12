@@ -10,6 +10,7 @@ const config: Config = {
 			},
 			size: {
 				board: "var(--board-size)",
+				"board-container": "calc((100% * 8/9) - 16px)",
 			},
 		},
 	},

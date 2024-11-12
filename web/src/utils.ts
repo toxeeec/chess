@@ -36,7 +36,7 @@ export const twMerge = extendTailwindMerge({
 			borderWidth: ["square"],
 		},
 		classGroups: {
-			size: [{ size: ["board"] }],
+			size: [{ size: ["board", "board-container"] }],
 		},
 	},
 })

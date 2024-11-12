@@ -36,7 +36,7 @@ export function useChess() {
 		const paddingX = parseFloat(paddingLeft) + parseFloat(paddingRight)
 		const paddingY = parseFloat(paddingTop) + parseFloat(paddingBottom)
 		const minSize = Math.min(width - paddingX, height - paddingY)
-		document.documentElement.style.setProperty("--board-parent-min-size", `${minSize}px`)
+		document.documentElement.style.setProperty("--board-container-min-size", `${minSize}px`)
 	})
 
 	return { pieces, movePiece, boardRef }

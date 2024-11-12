@@ -25,10 +25,7 @@ export function Chess() {
 			modifiers={[snapCenterToCursor, restrictToParentElement]}
 			onDragEnd={handleDragEnd}
 		>
-			<div
-				ref={boardRef}
-				className="grid size-board grid-cols-8 grid-rows-8 overflow-hidden rounded-lg"
-			>
+			<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8 rounded-lg">
 				{pieces.map(([square, piece]) => (
 					<DraggablePiece key={square} square={square} piece={piece} />
 				))}
@@ -49,7 +46,7 @@ function DraggablePiece({ square, piece }: { square: Square; piece: Piece }) {
 		<button
 			{...listeners}
 			{...attributes}
-			className={twJoin("z-10", isDragging && "z-20 cursor-grabbing")}
+			className={twJoin(isDragging ? "z-20" : "z-10", isDragging && "cursor-grabbing")}
 			ref={setNodeRef}
 			style={{
 				backgroundImage: `url(${Piece.imagePath(piece)})`,
@@ -68,12 +65,11 @@ function DroppableSquare({ square }: { square: Square }) {
 	return (
 		<div
 			className={twJoin(
-				"border-square border-neutral-500",
 				isLight ? "bg-neutral-400" : "bg-neutral-700",
-				!isOver && "border-none",
+				isOver && "border-square border-neutral-500",
 			)}
 			ref={setNodeRef}
-			style={{ gridArea: Square.gridArea(square) }}
+			style={{ gridArea: Square.gridArea(square), ...Square.borderRadiusStyles(square) }}
 		></div>
 	)
 }
