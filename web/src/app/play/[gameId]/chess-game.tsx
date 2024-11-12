@@ -1,6 +1,6 @@
 "use client"
 
-import { Chess } from "./chess"
+import { Chess } from "../chess"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { io } from "socket.io-client"

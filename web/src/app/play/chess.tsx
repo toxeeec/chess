@@ -1,7 +1,8 @@
 "use client"
 
 import { Piece } from "./piece"
-import { Square, SQUARES } from "./square"
+import { Square } from "./square"
+import { SQUARES } from "./square"
 import { useChess } from "./use-chess"
 import { restrictToParentElement } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"

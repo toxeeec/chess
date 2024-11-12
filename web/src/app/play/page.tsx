@@ -1,4 +1,4 @@
-import { Chess } from "../chess"
+import { Chess } from "./chess"
 import { CreateGameForm } from "./create-game-form"
 
 export default async function GameLobby() {
