@@ -1,5 +1,5 @@
+import { ChessGame } from "./chess-game"
 import { PlayerInvite } from "./player-invite"
-import { ChessGame } from "@/app/play/[gameId]/chess-game"
 
 export default async function Game({ params }: { params: Promise<{ gameId: string }> }) {
 	const { gameId } = await params

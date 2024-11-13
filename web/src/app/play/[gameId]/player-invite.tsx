@@ -1,5 +1,3 @@
-"use client"
-
 import { IconLink } from "@/components/icon-link"
 import { ArrowLeft } from "lucide-react"
 

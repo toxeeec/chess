@@ -1,6 +1,7 @@
 import { Piece } from "./piece"
 import { Square } from "./square"
 import { useResizeObserver } from "@/hooks"
+import rafSchd from "raf-schd"
 import { useRef, useState } from "react"
 
 type Position = Partial<Record<Square, Piece>>
@@ -28,6 +29,10 @@ export function useChess() {
 		}
 	}
 
+	const updateBoardContainerMinSize = rafSchd((minSize: number) => {
+		document.documentElement.style.setProperty("--board-container-min-size", `${minSize}px`)
+	})
+
 	useResizeObserver(parentRef, (entry) => {
 		const { width, height } = entry.target.getBoundingClientRect()
 		const { paddingLeft, paddingRight, paddingTop, paddingBottom } = getComputedStyle(
@@ -36,7 +41,7 @@ export function useChess() {
 		const paddingX = parseFloat(paddingLeft) + parseFloat(paddingRight)
 		const paddingY = parseFloat(paddingTop) + parseFloat(paddingBottom)
 		const minSize = Math.min(width - paddingX, height - paddingY)
-		document.documentElement.style.setProperty("--board-container-min-size", `${minSize}px`)
+		updateBoardContainerMinSize(minSize)
 	})
 
 	return { pieces, movePiece, boardRef }
