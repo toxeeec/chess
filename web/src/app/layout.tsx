@@ -1,13 +1,17 @@
 import "./globals.css"
+import { RouterProvider } from "./router-provider"
+import { ReactNode } from "react"
 
 export const metadata = {
 	title: "chess",
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
-		<html lang="en">
-			<body className="h-dvh bg-neutral-900">{children}</body>
-		</html>
+		<RouterProvider>
+			<html lang="en">
+				<body className="h-dvh bg-neutral-900">{children}</body>
+			</html>
+		</RouterProvider>
 	)
 }

@@ -22,7 +22,7 @@ export function LoadingOverlay({
 			>
 				<LoaderCircle
 					size={48}
-					className={twMerge("animate-spin stroke-neutral-400", !isLoading && "hidden")}
+					className={twMerge("animate-spin stroke-neutral-200", !isLoading && "hidden")}
 				/>
 			</ProgressBar>
 			<div
