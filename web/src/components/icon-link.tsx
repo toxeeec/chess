@@ -14,7 +14,7 @@ export function IconLink({ href, children, ...props }: LinkProps) {
 			onFocus={() => href && router.prefetch(href)}
 			className={composeRenderProps(
 				props.className,
-				"inline-block rounded-full leading-none outline-none hover:opacity-90 focus-visible:outline-2 focus-visible:outline-neutral-200",
+				"relative inline-block rounded-full outline-none before:invisible before:absolute before:box-content before:size-full before:-translate-x-[12.5%] before:-translate-y-[12.5%] before:rounded-full before:bg-neutral-700 before:p-[12.5%] hover:before:visible focus-visible:before:visible [&>*]:relative",
 			)}
 		>
 			{(renderProps) => (typeof children === "function" ? children(renderProps) : children)}

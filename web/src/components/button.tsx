@@ -9,7 +9,7 @@ export function Button({ children, ...props }: ButtonProps) {
 			{...props}
 			className={composeRenderProps(
 				props.className,
-				"pressed:bg-opacity-90 rounded-lg bg-neutral-200 py-4 text-2xl font-semibold text-neutral-700 outline-none hover:bg-opacity-90 focus-visible:outline-2 focus-visible:outline-neutral-200 disabled:bg-opacity-50",
+				"pressed:bg-opacity-90 rounded-lg bg-neutral-200 py-4 text-2xl font-semibold text-neutral-700 outline-none hover:bg-opacity-90 focus-visible:outline-neutral-200 disabled:bg-opacity-50",
 			)}
 		>
 			{(renderProps) => (typeof children === "function" ? children(renderProps) : children)}

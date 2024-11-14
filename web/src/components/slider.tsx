@@ -31,7 +31,7 @@ export function Slider({ label, format, name, ...props }: SliderProps) {
 				<div className="absolute top-1/2 h-2 w-full -translate-y-1/2 rounded-full bg-neutral-700"></div>
 				<SliderThumb
 					name={name}
-					className="dragging:opacity-90 top-1/2 h-6 w-6 rounded-full border-2 border-neutral-800 bg-neutral-200 outline-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-200 disabled:bg-neutral-700"
+					className="dragging:opacity-90 top-1/2 size-6 rounded-full border-2 border-neutral-800 bg-neutral-200 focus-visible:outline focus-visible:outline-neutral-200 disabled:bg-neutral-700"
 				/>
 			</SliderTrack>
 		</RacSlider>
