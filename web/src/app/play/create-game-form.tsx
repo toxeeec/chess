@@ -12,32 +12,34 @@ export function CreateGameForm() {
 	const { execute, isPending } = useAction(createGame)
 
 	return (
-		<div className="relative rounded-t-[2rem] bg-neutral-800">
+		<div className="relative h-80 rounded-t-[2rem] bg-neutral-800 p-6">
 			<LoadingOverlay isLoading={isPending} className="bg-neutral-800/75" />
-			<Form action={execute} className="flex flex-col gap-8 p-6">
-				<Slider
-					isDisabled={isPending}
-					label="Time"
-					name="time"
-					defaultValue={TIME_VALUES.indexOf(DEFAULT_TIME)}
-					maxValue={TIME_VALUES.length - 1}
-					format={({ getThumbValue }) => {
-						const value = TIME_VALUES[getThumbValue(0)]!
-						return `${value} ${pluralize("minute", value)}`
-					}}
-				/>
-				<Slider
-					isDisabled={isPending}
-					label="Increment"
-					name="increment"
-					defaultValue={INCREMENT_VALUES.indexOf(DEFAULT_INCREMENT)}
-					maxValue={INCREMENT_VALUES.length - 1}
-					format={({ getThumbValue }) => {
-						const value = INCREMENT_VALUES[getThumbValue(0)]!
-						return `${value} ${pluralize("second", value)}`
-					}}
-				/>
-				<Button type="submit" className="mt-8" isDisabled={isPending}>
+			<Form action={execute} className="flex h-full flex-col justify-between">
+				<div className="flex flex-col gap-8">
+					<Slider
+						isDisabled={isPending}
+						label="Time"
+						name="time"
+						defaultValue={TIME_VALUES.indexOf(DEFAULT_TIME)}
+						maxValue={TIME_VALUES.length - 1}
+						format={({ getThumbValue }) => {
+							const value = TIME_VALUES[getThumbValue(0)]!
+							return `${value} ${pluralize("minute", value)}`
+						}}
+					/>
+					<Slider
+						isDisabled={isPending}
+						label="Increment"
+						name="increment"
+						defaultValue={INCREMENT_VALUES.indexOf(DEFAULT_INCREMENT)}
+						maxValue={INCREMENT_VALUES.length - 1}
+						format={({ getThumbValue }) => {
+							const value = INCREMENT_VALUES[getThumbValue(0)]!
+							return `${value} ${pluralize("second", value)}`
+						}}
+					/>
+				</div>
+				<Button type="submit" isDisabled={isPending}>
 					Play
 				</Button>
 			</Form>
