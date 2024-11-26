@@ -1,7 +1,7 @@
 import { twMerge } from "@/utils"
 import { LoaderCircle } from "lucide-react"
 import { ProgressBar } from "react-aria-components"
-import { ClassNameValue } from "tailwind-merge"
+import { ClassNameValue, twJoin } from "tailwind-merge"
 
 export function LoadingOverlay({
 	isLoading,
@@ -22,7 +22,7 @@ export function LoadingOverlay({
 			>
 				<LoaderCircle
 					size={48}
-					className={twMerge("animate-spin stroke-neutral-200", !isLoading && "hidden")}
+					className={twJoin("animate-spin stroke-neutral-200", !isLoading && "hidden")}
 				/>
 			</ProgressBar>
 			<div
