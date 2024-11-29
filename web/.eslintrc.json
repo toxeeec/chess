@@ -11,6 +11,19 @@
 	],
 	"rules": {
 		"react-compiler/react-compiler": "error",
-		"@typescript-eslint/no-namespace": "off"
+		"@typescript-eslint/no-namespace": "off",
+		"no-restricted-imports": [
+			"error",
+			{
+				"paths": [
+					{
+						"name": "tailwind-merge",
+						"importNames": [
+							"twMerge"
+						]
+					}
+				]
+			}
+		]
 	}
 }

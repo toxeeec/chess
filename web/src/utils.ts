@@ -1,6 +1,21 @@
 import { Modifier } from "@dnd-kit/core"
-import { composeRenderProps as racComposeRenderProps } from "react-aria-components"
 import { extendTailwindMerge } from "tailwind-merge"
+import { defaultConfig } from "tailwind-variants"
+
+const twMergeConfig = {
+	extend: {
+		theme: {
+			borderWidth: ["square"],
+		},
+		classGroups: {
+			size: [{ size: ["board", "board-container"] }],
+		},
+	},
+} as const satisfies Parameters<typeof extendTailwindMerge>[0]
+
+defaultConfig.twMergeConfig = twMergeConfig
+
+export const twMerge = extendTailwindMerge(twMergeConfig)
 
 export const restrictToParentElement: Modifier = ({
 	containerNodeRect,
@@ -22,24 +37,6 @@ export const restrictToParentElement: Modifier = ({
 
 	return transform
 }
-
-export function composeRenderProps<T extends Parameters<typeof twMerge>[number], U, V extends T>(
-	value: Parameters<typeof racComposeRenderProps<T, U, V>>[0],
-	...classLists: T[]
-) {
-	return racComposeRenderProps(value, (prevValue) => twMerge(classLists, prevValue) as V)
-}
-
-export const twMerge = extendTailwindMerge({
-	extend: {
-		theme: {
-			borderWidth: ["square"],
-		},
-		classGroups: {
-			size: [{ size: ["board", "board-container"] }],
-		},
-	},
-})
 
 function clamp(val: number, min: number, max: number) {
 	return Math.min(Math.max(val, min), max)
