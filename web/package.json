@@ -6,10 +6,12 @@
 		"dev": "next dev --port 2882",
 		"build": "next build",
 		"start": "next start",
-		"lint": "next lint"
+		"lint": "next lint",
+		"typecheck": "tsc --noEmit"
 	},
 	"simple-git-hooks": {
-		"pre-commit": "cd web && bunx pretty-quick --staged"
+		"pre-commit": "cd web && bunx pretty-quick --staged",
+		"pre-push": "cd web && bun lint && bun typecheck"
 	},
 	"dependencies": {
 		"@dnd-kit/core": "^6.3.1",
