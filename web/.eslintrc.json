@@ -5,10 +5,7 @@
 		"plugin:drizzle/recommended",
 		"prettier"
 	],
-	"plugins": [
-		"react-compiler",
-		"drizzle"
-	],
+	"plugins": ["react-compiler", "drizzle"],
 	"rules": {
 		"react-compiler/react-compiler": "error",
 		"@typescript-eslint/no-namespace": "off",
@@ -18,9 +15,7 @@
 				"paths": [
 					{
 						"name": "tailwind-merge",
-						"importNames": [
-							"twMerge"
-						]
+						"importNames": ["twMerge"]
 					}
 				]
 			}
