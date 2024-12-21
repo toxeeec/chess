@@ -21,7 +21,7 @@ export function useChess() {
 		})
 	}
 
-	const parentRef = useRef<HTMLElement | null>(null)
+	const parentRef = useRef<HTMLElement>(null)
 	const boardRef = (el: HTMLElement | null) => {
 		const parent = el?.parentElement
 		if (parent) {
@@ -34,13 +34,9 @@ export function useChess() {
 	})
 
 	useResizeObserver(parentRef, (entry) => {
-		const { width, height } = entry.target.getBoundingClientRect()
-		const { paddingLeft, paddingRight, paddingTop, paddingBottom } = getComputedStyle(
-			entry.target,
-		)
-		const paddingX = parseFloat(paddingLeft) + parseFloat(paddingRight)
-		const paddingY = parseFloat(paddingTop) + parseFloat(paddingBottom)
-		const minSize = Math.min(width - paddingX, height - paddingY)
+		const { blockSize, inlineSize } = entry.borderBoxSize[0]!
+		const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
+		const minSize = Math.min(blockSize - (2.5 + 0.75) * 2 * remSize, inlineSize) // PlayerInfo + gap
 		updateBoardContainerMinSize(minSize)
 	})
 

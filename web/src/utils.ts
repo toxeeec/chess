@@ -8,6 +8,7 @@ const twMergeConfig = {
 			borderWidth: ["square"],
 		},
 		classGroups: {
+			w: [{ w: ["board"] }],
 			size: [{ size: ["board", "board-container"] }],
 		},
 	},

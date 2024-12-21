@@ -8,10 +8,11 @@ import { restrictToParentElement } from "@/utils"
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core"
 import { snapCenterToCursor } from "@dnd-kit/modifiers"
 import { CSS } from "@dnd-kit/utilities"
+import { User } from "lucide-react"
 import { useId } from "react"
 import { twJoin } from "tailwind-merge"
 
-export function Chess() {
+export function Chess({ white, black }: { white: string; black: string }) {
 	const { pieces, movePiece, boardRef } = useChess()
 	const id = useId()
 
@@ -21,20 +22,24 @@ export function Chess() {
 	}
 
 	return (
-		<DndContext
-			id={id}
-			modifiers={[snapCenterToCursor, restrictToParentElement]}
-			onDragEnd={handleDragEnd}
-		>
-			<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8 rounded-lg">
-				{pieces.map(([square, piece]) => (
-					<DraggablePiece key={square} square={square} piece={piece} />
-				))}
-				{SQUARES.map((square) => (
-					<DroppableSquare key={square} square={square} />
-				))}
-			</div>
-		</DndContext>
+		<div className="flex size-board-container flex-col items-center gap-3">
+			<PlayerInfo name={black} />
+			<DndContext
+				id={id}
+				modifiers={[snapCenterToCursor, restrictToParentElement]}
+				onDragEnd={handleDragEnd}
+			>
+				<div ref={boardRef} className="grid size-board grid-cols-8 grid-rows-8 rounded-lg">
+					{pieces.map(([square, piece]) => (
+						<DraggablePiece key={square} square={square} piece={piece} />
+					))}
+					{SQUARES.map((square) => (
+						<DroppableSquare key={square} square={square} />
+					))}
+				</div>
+			</DndContext>
+			<PlayerInfo name={white} />
+		</div>
 	)
 }
 
@@ -72,5 +77,14 @@ function DroppableSquare({ square }: { square: Square }) {
 			ref={setNodeRef}
 			style={{ gridArea: Square.gridArea(square), ...Square.borderRadiusStyles(square) }}
 		></div>
+	)
+}
+
+function PlayerInfo({ name }: { name: string }) {
+	return (
+		<div className="flex w-board items-start gap-2 overflow-hidden font-semibold text-neutral-200">
+			<User className="size-10 flex-shrink-0 rounded-md bg-neutral-700 stroke-neutral-400 p-1" />
+			<span className="truncate">{name}</span>
+		</div>
 	)
 }

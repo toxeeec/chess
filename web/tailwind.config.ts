@@ -8,9 +8,12 @@ const config: Config = {
 			borderWidth: {
 				square: "var(--square-border-width)",
 			},
+			width: {
+				board: "var(--board-size, 0)",
+			},
 			size: {
-				board: "var(--board-size)",
-				"board-container": "calc((100% * 8/9) - 16px)",
+				board: "var(--board-size, 0)",
+				"board-container": "var(--board-container-size)",
 			},
 		},
 	},

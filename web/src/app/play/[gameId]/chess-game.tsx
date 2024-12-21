@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { io } from "socket.io-client"
 
-export function ChessGame({ gameId }: { gameId: string }) {
+export function ChessGame({ gameId, white }: { gameId: string; white: string }) {
 	const router = useRouter()
 
 	useEffect(() => {
@@ -24,5 +24,5 @@ export function ChessGame({ gameId }: { gameId: string }) {
 		})
 	}, [gameId, router])
 
-	return <Chess />
+	return <Chess white={white} black="Opponent" />
 }
