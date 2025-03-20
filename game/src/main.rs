@@ -1,3 +1,8 @@
+mod bitboard;
+
+use bitboard::Bitboard;
+
 fn main() {
-    println!("Hello, world!");
+    let bb = Bitboard::new([0, 1, 2, 3, 4, 5, 6, 7]);
+    println!("{:?}", bb);
 }
