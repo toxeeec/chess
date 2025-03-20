@@ -1,7 +1,10 @@
 use itertools::{Itertools, intersperse};
-use std::{fmt, ops::BitOrAssign};
+use std::{
+    fmt,
+    ops::{BitAnd, BitOr, BitOrAssign},
+};
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub(super) struct Bitboard(u64);
 
 impl Bitboard {
@@ -12,6 +15,15 @@ impl Bitboard {
             bb |= 1 << sq
         }
         bb
+    }
+
+    pub(super) fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub(super) fn contains(self, square: u32) -> bool {
+        debug_assert!(square < 64);
+        !(self & 1 << square).is_empty()
     }
 }
 
@@ -30,6 +42,20 @@ impl fmt::Debug for Bitboard {
                     f(&String::from_iter(intersperse(row, &' ')))
                 })
         )
+    }
+}
+
+impl BitAnd<u64> for Bitboard {
+    type Output = Self;
+    fn bitand(self, rhs: u64) -> Self::Output {
+        Self(self.0 & rhs)
+    }
+}
+
+impl BitOr<Self> for Bitboard {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
     }
 }
 

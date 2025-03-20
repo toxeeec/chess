@@ -1,8 +1,9 @@
 mod bitboard;
+mod board;
 
-use bitboard::Bitboard;
+use board::Board;
 
 fn main() {
-    let bb = Bitboard::new([0, 1, 2, 3, 4, 5, 6, 7]);
-    println!("{:?}", bb);
+    let board = Board::default();
+    println!("{:?}", board);
 }
