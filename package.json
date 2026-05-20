@@ -9,7 +9,7 @@
 	"scripts": {
 		"build": "vite build",
 		"deploy": "pnpm run build && wrangler deploy",
-		"dev": "vite dev --port 3000",
+		"dev": "portless run vite dev",
 		"fmt": "oxfmt",
 		"lint": "oxlint",
 		"prepare": "prek install --prepare-hooks",
@@ -39,6 +39,7 @@
 		"oxfmt": "^0.51.0",
 		"oxlint": "^1.66.0",
 		"oxlint-tsgolint": "^0.23.0",
+		"portless": "^0.13.0",
 		"vite": "^8.0.13",
 		"wrangler": "^4.93.0"
 	},
