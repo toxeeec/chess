@@ -1,0 +1,18 @@
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "format"
+name = "format"
+entry = "pnpm run fmt"
+language = "system"
+pass_filenames = false
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "lint"
+name = "lint"
+entry = "pnpm run lint"
+language = "system"
+files = "\\.(ts|tsx)$"
+stages = ["pre-commit"]

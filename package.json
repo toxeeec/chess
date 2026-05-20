@@ -12,6 +12,7 @@
 		"dev": "vite dev --port 3000",
 		"fmt": "oxfmt",
 		"lint": "oxlint",
+		"prepare": "prek install --prepare-hooks",
 		"preview": "vite preview"
 	},
 	"dependencies": {
@@ -27,6 +28,7 @@
 		"tailwindcss": "^4.3.0"
 	},
 	"devDependencies": {
+		"@j178/prek": "^0.4.1",
 		"@rolldown/plugin-babel": "^0.2.3",
 		"@tanstack/devtools-vite": "0.7.0",
 		"@types/node": "^25.9.1",
