@@ -5,6 +5,9 @@ export default defineConfig({
 	printWidth: 100,
 	semi: false,
 	sortImports: true,
-	sortTailwindcss: true,
+	sortTailwindcss: {
+		functions: ["clsx"],
+		stylesheet: "./src/styles.css",
+	},
 	useTabs: true,
 })
