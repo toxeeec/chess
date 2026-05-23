@@ -14,14 +14,6 @@ export default defineConfig({
 		typeAware: true,
 		typeCheck: true,
 	},
-	overrides: [
-		{
-			files: ["*.config.ts"],
-			rules: {
-				"import/no-default-export": "off",
-			},
-		},
-	],
 	plugins: ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "node", "promise"],
 	rules: { "react/react-in-jsx-scope": "off" },
 })

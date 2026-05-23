@@ -12,11 +12,14 @@
 		"dev": "portless run vite dev",
 		"fmt": "oxfmt",
 		"lint": "oxlint",
-		"prepare": "prek install --prepare-hooks",
+		"prepare": "prek install --quiet --prepare-hooks",
 		"preview": "vite preview"
 	},
 	"dependencies": {
 		"@cloudflare/vite-plugin": "^1.37.2",
+		"@dnd-kit/abstract": "^0.4.0",
+		"@dnd-kit/dom": "^0.4.0",
+		"@dnd-kit/react": "^0.4.0",
 		"@tailwindcss/vite": "^4.3.0",
 		"@tanstack/react-devtools": "0.10.5",
 		"@tanstack/react-router": "1.170.4",
