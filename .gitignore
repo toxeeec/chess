@@ -1,11 +1,7 @@
-node_modules
+.agents
 .DS_Store
-dist
-dist-ssr
-*.local
 .env
-.tanstack
 .wrangler
-.output
-__unconfig*
-todos.json
+dist
+node_modules
+*.local
