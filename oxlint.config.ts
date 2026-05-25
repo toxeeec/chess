@@ -14,6 +14,16 @@ export default defineConfig({
 		typeAware: true,
 		typeCheck: true,
 	},
-	plugins: ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "node", "promise"],
+	plugins: [
+		"typescript",
+		"unicorn",
+		"oxc",
+		"import",
+		"react",
+		"jsx-a11y",
+		"node",
+		"promise",
+		"vitest",
+	],
 	rules: { "react/react-in-jsx-scope": "off", "typescript/no-explicit-any": "error" },
 })
