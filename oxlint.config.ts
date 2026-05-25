@@ -15,5 +15,5 @@ export default defineConfig({
 		typeCheck: true,
 	},
 	plugins: ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "node", "promise"],
-	rules: { "react/react-in-jsx-scope": "off" },
+	rules: { "react/react-in-jsx-scope": "off", "typescript/no-explicit-any": "error" },
 })

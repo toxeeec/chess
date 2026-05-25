@@ -4,4 +4,12 @@
 	"compatibility_date": "2025-09-02",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "@tanstack/react-start/server-entry",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "chess",
+			"database_id": "6f626adc-c7c8-4dbd-a9fb-7bed0ac2a299",
+			"remote": true,
+		},
+	],
 }
