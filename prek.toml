@@ -16,3 +16,12 @@ entry = "pnpm run lint"
 language = "system"
 files = "\\.(ts|tsx)$"
 stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "test"
+name = "test"
+entry = "pnpm run test:changed"
+language = "system"
+files = "\\.(ts|tsx)$"
+pass_filenames = false
+stages = ["pre-push"]
