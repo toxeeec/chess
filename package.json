@@ -13,14 +13,16 @@
 		"db:studio": "drizzle-kit studio",
 		"deploy": "pnpm run build && wrangler deploy",
 		"dev": "portless run vite dev",
-		"fmt": "oxfmt",
+		"fmt": "oxfmt && cargo fmt --manifest-path game-server/Cargo.toml",
 		"generate-types": "wrangler types",
-		"lint": "oxlint",
+		"lint": "pnpm run lint:ts && pnpm run lint:rust",
+		"lint:rust": "cargo clippy --manifest-path game-server/Cargo.toml",
+		"lint:ts": "oxlint",
 		"prepare": "prek install --quiet --prepare-hooks",
 		"preview": "vite preview",
 		"skills:install": "skills experimental_install",
-		"test": "vitest run",
-		"test:changed": "vitest run --changed origin/main"
+		"test": "vitest run && cargo test --manifest-path game-server/Cargo.toml",
+		"test:changed": "vitest run --changed origin/main && cargo test --manifest-path game-server/Cargo.toml"
 	},
 	"dependencies": {
 		"@cloudflare/vite-plugin": "^1.39.0",
