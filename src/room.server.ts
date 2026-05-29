@@ -1,47 +1,33 @@
-import { getCookie } from "@tanstack/react-start/server"
+import { redirect } from "@tanstack/react-router"
+import { createServerFn } from "@tanstack/react-start"
+import { setCookie } from "@tanstack/react-start/server"
 import { and, eq, or, sql } from "drizzle-orm"
-import z from "zod"
 
 import { db } from "./db.server"
 import { nanoid } from "./nanoid.server"
-import { roomIdSchema } from "./room"
+import {
+	getRoomSessionFromCookie,
+	ROOM_SESSION_COOKIE_NAME,
+	roomIdSchema,
+	roomSessionCodec,
+	type RoomSession,
+} from "./room"
 import { gamesTable } from "./schema.server"
 
-export const ROOM_SESSION_COOKIE_NAME = "room-session"
+export const redirectToRoom = createServerFn().handler(async () => {
+	let roomSession = getRoomSessionFromCookie()
+	if (roomSession) throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
 
-export const roomSessionCodec = z.codec(
-	z.string(),
-	z.object({ token: z.string(), roomId: roomIdSchema }),
-	{
-		decode: (jsonString, ctx) => {
-			try {
-				return JSON.parse(jsonString)
-			} catch (err) {
-				ctx.issues.push({
-					code: "invalid_format",
-					format: "json",
-					input: jsonString,
-					message: String(err),
-				})
-				return z.NEVER
-			}
-		},
-		encode: (value) => JSON.stringify(value),
-	},
-)
+	roomSession = await createRoomSession()
+	setCookie(ROOM_SESSION_COOKIE_NAME, roomSessionCodec.encode(roomSession), {
+		maxAge: 30 * 60, // 30 minutes
+		secure: true,
+		sameSite: "lax",
+	})
+	throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+})
 
-type RoomSession = z.infer<typeof roomSessionCodec>
-
-export function getRoomSession() {
-	const roomSessionCookie = getCookie(ROOM_SESSION_COOKIE_NAME)
-	if (!roomSessionCookie) return null
-
-	const { success, data } = roomSessionCodec.safeDecode(roomSessionCookie)
-	if (!success) return null
-	return data
-}
-
-export async function createRoomSession() {
+async function createRoomSession() {
 	const roomSession = { roomId: generateRoomId(), token: generateToken() }
 	await db.insert(gamesTable).values({ roomId: roomSession.roomId, white: roomSession.token })
 

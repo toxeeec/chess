@@ -2,8 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import z from "zod"
 
 import { Chessboard } from "#/chessboard"
-import { validateRoomSession } from "#/room"
-import { roomIdSchema } from "#/room"
+import { getGameFen, ensureRoomSessionMatches, roomIdSchema } from "#/room"
 
 const paramsSchema = z.object({ roomId: roomIdSchema })
 
@@ -15,16 +14,17 @@ export const Route = createFileRoute("/$roomId")({
 			return data
 		},
 	},
-	beforeLoad: async ({ params }) => {
-		await validateRoomSession({ data: params.roomId })
-	},
+	beforeLoad: ({ params }) => ensureRoomSessionMatches(params.roomId),
+	loader: () => getGameFen(),
 	component: RouteComponent,
 })
 
 function RouteComponent() {
+	const fen = Route.useLoaderData()
+
 	return (
 		<div className="h-full content-center">
-			<Chessboard />
+			<Chessboard fen={fen} />
 		</div>
 	)
 }

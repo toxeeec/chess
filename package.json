@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"build": "vite build",
+		"build:game-server": "cargo build --manifest-path game-server/Cargo.toml --target wasm32-unknown-unknown && wasm-bindgen game-server/target/wasm32-unknown-unknown/debug/game_server.wasm --target module --typescript --out-dir game-server/build --experimental-reset-state-function && node scripts/patchGameServerWasmImport.mjs",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"deploy": "pnpm run build && wrangler deploy",
@@ -22,7 +23,7 @@
 		"test:changed": "vitest run --changed origin/main"
 	},
 	"dependencies": {
-		"@cloudflare/vite-plugin": "^1.38.0",
+		"@cloudflare/vite-plugin": "^1.39.0",
 		"@dnd-kit/abstract": "^0.4.0",
 		"@dnd-kit/dom": "^0.4.0",
 		"@dnd-kit/react": "^0.4.0",
@@ -30,7 +31,7 @@
 		"@tanstack/react-devtools": "0.10.5",
 		"@tanstack/react-router": "1.170.8",
 		"@tanstack/react-router-devtools": "1.167.0",
-		"@tanstack/react-start": "1.168.11",
+		"@tanstack/react-start": "1.168.14",
 		"@tanstack/router-plugin": "^1.168.11",
 		"drizzle-orm": "1.0.0-rc.3",
 		"react": "^19.2.6",
@@ -39,25 +40,26 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.16.9",
-		"@j178/prek": "^0.4.1",
+		"@cloudflare/vitest-pool-workers": "^0.16.10",
+		"@j178/prek": "^0.4.3",
 		"@rolldown/plugin-babel": "^0.2.3",
 		"@tanstack/devtools-vite": "0.7.0",
 		"@tanstack/start-storage-context": "^1.167.8",
+		"@total-typescript/ts-reset": "^0.6.1",
 		"@types/node": "^25.9.1",
 		"@types/react": "^19.2.15",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.2",
 		"babel-plugin-react-compiler": "^1.0.0",
 		"drizzle-kit": "1.0.0-rc.3",
-		"oxfmt": "^0.51.0",
-		"oxlint": "^1.66.0",
+		"oxfmt": "^0.52.0",
+		"oxlint": "^1.67.0",
 		"oxlint-tsgolint": "^0.23.0",
-		"portless": "^0.13.0",
-		"skills": "^1.5.7",
+		"portless": "^0.13.1",
+		"skills": "^1.5.9",
 		"vite": "^8.0.14",
 		"vitest": "^4.1.7",
-		"wrangler": "^4.94.0"
+		"wrangler": "^4.95.0"
 	},
 	"devEngines": {
 		"packageManager": {

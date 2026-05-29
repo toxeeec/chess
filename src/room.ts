@@ -1,43 +1,79 @@
 import { redirect } from "@tanstack/react-router"
-import { createServerFn } from "@tanstack/react-start"
-import { deleteCookie, setCookie } from "@tanstack/react-start/server"
+import { createIsomorphicFn, createMiddleware, createServerFn } from "@tanstack/react-start"
+import { deleteCookie, getCookie } from "@tanstack/react-start/server"
+import { env } from "cloudflare:workers"
 import z from "zod"
 
-import {
-	createRoomSession,
-	getRoomSession,
-	hasGameForSession,
-	ROOM_SESSION_COOKIE_NAME,
-	roomSessionCodec,
-} from "./room.server"
+import { hasGameForSession } from "./room.server"
+
+export const ROOM_SESSION_COOKIE_NAME = "room-session"
 
 export const roomIdSchema = z.nanoid().brand<"RoomId">()
 export type RoomId = z.infer<typeof roomIdSchema>
 
-export const redirectToRoom = createServerFn({ method: "GET" }).handler(async () => {
-	let roomSession = getRoomSession()
-	if (roomSession) throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+export const roomSessionCodec = z.codec(
+	z.string(),
+	z.object({ token: z.string(), roomId: roomIdSchema }),
+	{
+		decode: (jsonString, ctx) => {
+			try {
+				// oxlint-disable-next-line
+				return JSON.parse(jsonString) as any
+			} catch (err) {
+				ctx.issues.push({
+					code: "invalid_format",
+					format: "json",
+					input: jsonString,
+					message: String(err),
+				})
+				return z.NEVER
+			}
+		},
+		encode: (value) => JSON.stringify(value),
+	},
+)
+export type RoomSession = z.infer<typeof roomSessionCodec>
 
-	roomSession = await createRoomSession()
-	setCookie(ROOM_SESSION_COOKIE_NAME, roomSessionCodec.encode(roomSession), {
-		maxAge: 30 * 60, // 30 minutes
-		secure: true,
-		sameSite: "lax",
+export const getRoomSessionFromCookie = createIsomorphicFn()
+	.server(() => {
+		const cookie = getCookie(ROOM_SESSION_COOKIE_NAME)
+		if (!cookie) return undefined
+		return roomSessionCodec.safeDecode(cookie).data
 	})
-	throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+	.client(() => {
+		const cookie = document.cookie
+			.split("; ")
+			.find((cookie) => cookie.startsWith(`${ROOM_SESSION_COOKIE_NAME}=`))
+			?.slice(ROOM_SESSION_COOKIE_NAME.length + 1)
+		if (!cookie) return undefined
+		return roomSessionCodec.safeDecode(decodeURIComponent(cookie)).data
+	})
+
+export function ensureRoomSessionMatches(roomId: RoomId) {
+	const roomSession = getRoomSessionFromCookie()
+	if (!roomSession) throw redirect({ to: "/" })
+	if (roomSession.roomId !== roomId) {
+		throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+	}
+}
+
+export const roomSessionMiddleware = createMiddleware().server(async ({ next }) => {
+	const roomSession = getRoomSessionFromCookie()
+	if (!roomSession) {
+		deleteCookie(ROOM_SESSION_COOKIE_NAME)
+		throw new Error("Unauthorized")
+	}
+
+	if (!(await hasGameForSession(roomSession))) {
+		deleteCookie(ROOM_SESSION_COOKIE_NAME)
+		throw new Error("Forbidden")
+	}
+
+	return next({ context: { roomSession } })
 })
 
-export const validateRoomSession = createServerFn()
-	.inputValidator(roomIdSchema)
-	.handler(async ({ data: roomId }) => {
-		const roomSession = getRoomSession()
-		if (!roomSession) throw redirect({ to: "/" })
-		if (roomId !== roomSession.roomId) {
-			throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
-		}
-
-		if (await hasGameForSession(roomSession)) return
-
-		deleteCookie(ROOM_SESSION_COOKIE_NAME)
-		throw redirect({ to: "/" })
+export const getGameFen = createServerFn()
+	.middleware([roomSessionMiddleware])
+	.handler(async ({ context }) => {
+		return env.GAME_SERVER.getByName(context.roomSession.roomId).fen()
 	})

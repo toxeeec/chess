@@ -1,9 +1,11 @@
 import { Modifier, type DragOperation } from "@dnd-kit/abstract"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
-import { useRef, useSyncExternalStore } from "react"
+import { useRef, useState } from "react"
 
 import { clsx } from "#/clsx"
+
+import { BoardStoreContext, createBoardStore, useBoardStore, type Piece } from "./board-store"
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1] as const
@@ -20,66 +22,6 @@ const Square = {
 		const file = this.getFile(square)
 		return (rank + file) % 2 === 0
 	},
-}
-
-type Piece = "r" | "n" | "b" | "q" | "k" | "p" | "R" | "N" | "B" | "Q" | "K" | "P"
-
-const INITIAL_BOARD = (() => {
-	const board: (Piece | undefined)[] = Array.from({ length: 64 })
-
-	board[0] = "r"
-	board[1] = "n"
-	board[2] = "b"
-	board[3] = "q"
-	board[4] = "k"
-	board[5] = "b"
-	board[6] = "n"
-	board[7] = "r"
-
-	board[56] = "R"
-	board[57] = "N"
-	board[58] = "B"
-	board[59] = "Q"
-	board[60] = "K"
-	board[61] = "B"
-	board[62] = "N"
-	board[63] = "R"
-
-	for (let file = 0; file < 8; file += 1) {
-		board[8 + file] = "p"
-
-		board[48 + file] = "P"
-	}
-
-	return board
-})()
-
-let board = INITIAL_BOARD
-const boardListeners = new Set<() => void>()
-
-function subscribeToBoard(listener: () => void) {
-	boardListeners.add(listener)
-	return () => boardListeners.delete(listener)
-}
-
-function emitBoardChange() {
-	for (const listener of boardListeners) {
-		listener()
-	}
-}
-
-function getPieceOnSquare(square: number) {
-	return board[square]
-}
-
-function movePiece(sourceSquare: number, targetSquare: number) {
-	const movingPiece = board[sourceSquare]
-	if (!movingPiece || sourceSquare === targetSquare) return
-
-	board = [...board]
-	board[sourceSquare] = undefined
-	board[targetSquare] = movingPiece
-	emitBoardChange()
 }
 
 class SnapToPointer extends Modifier {
@@ -100,37 +42,37 @@ class SnapToPointer extends Modifier {
 	}
 }
 
-export function Chessboard() {
+export function Chessboard({ fen }: { fen: string }) {
 	const ref = useRef<HTMLDivElement>(null)
+	const [store] = useState(() => createBoardStore(fen))
+
 	return (
-		<DragDropProvider
-			modifiers={[
-				SnapToPointer,
-				RestrictToElement.configure({
-					element: () => ref.current,
-				}),
-			]}
-			onDragEnd={({ operation: { source, target } }) => {
-				if (!source || !target) return
-				movePiece(Number(source.id), Number(target.id))
-			}}
-		>
-			<div className="relative grid size-[round(down,80vmin,8px)] grid-cols-8 justify-self-center">
-				<div ref={ref} className="absolute inset-[-6.25%]" />
-				{Array.from({ length: 64 }, (_, index) => index).map((square) => (
-					<BoardSquare key={square} square={square} />
-				))}
-			</div>
-		</DragDropProvider>
+		<BoardStoreContext value={store}>
+			<DragDropProvider
+				modifiers={[
+					SnapToPointer,
+					RestrictToElement.configure({
+						element: () => ref.current,
+					}),
+				]}
+				onDragEnd={({ operation: { source, target } }) => {
+					if (!source || !target) return
+					store.movePiece(Number(source.id), Number(target.id))
+				}}
+			>
+				<div className="relative grid size-[round(down,80vmin,8px)] grid-cols-8 justify-self-center">
+					<div ref={ref} className="absolute inset-[-6.25%]" />
+					{Array.from({ length: 64 }, (_, index) => index).map((square) => (
+						<BoardSquare key={square} square={square} />
+					))}
+				</div>
+			</DragDropProvider>
+		</BoardStoreContext>
 	)
 }
 
 function BoardSquare({ square }: { square: number }) {
-	const piece = useSyncExternalStore(
-		subscribeToBoard,
-		() => getPieceOnSquare(square),
-		() => getPieceOnSquare(square),
-	)
+	const piece = useBoardStore((store) => store.board[square])
 	const { isDropTarget, ref } = useDroppable({
 		id: square,
 	})

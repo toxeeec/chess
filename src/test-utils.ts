@@ -1,18 +1,17 @@
-import type { RegisteredRouter, ValidateRedirectOptions } from "@tanstack/react-router"
+import type { AnyRedirect, RegisteredRouter, ValidateRedirectOptions } from "@tanstack/react-router"
+import { isRedirect } from "@tanstack/react-router"
 import * as server from "@tanstack/react-start/server"
 import { runWithStartContext } from "@tanstack/start-storage-context"
 import { expect } from "vitest"
 
 import { getRouter } from "./router"
 
-export async function runTestServerFn<T>(
-	fn: () => Promise<T>,
-	requestInit?: RequestInit,
-): Promise<T | Response> {
+export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit?: RequestInit) {
 	const request = new Request("http://localhost/", requestInit)
 
-	let result: T
-	const response = await server.requestHandler(async () => {
+	let result: AnyRedirect | Awaited<T> | undefined
+	let error: unknown
+	await server.requestHandler(async () => {
 		result = await runWithStartContext(
 			{
 				getRouter,
@@ -22,12 +21,20 @@ export async function runTestServerFn<T>(
 				executedRequestMiddlewares: new Set(),
 				handlerType: "serverFn",
 			},
-			fn,
+			async () => {
+				try {
+					return await fn()
+				} catch (err) {
+					if (isRedirect(err)) return err
+					error = err
+					return undefined
+				}
+			},
 		)
 		return new Response()
 	})(request, {})
 
-	if ("options" in response) return response
+	if (error) throw error
 	return result!
 }
 

@@ -3,13 +3,27 @@
 	"name": "chess",
 	"compatibility_date": "2025-09-02",
 	"compatibility_flags": ["nodejs_compat"],
-	"main": "@tanstack/react-start/server-entry",
+	"main": "src/server.ts",
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "chess",
 			"database_id": "6f626adc-c7c8-4dbd-a9fb-7bed0ac2a299",
 			"remote": true,
+		},
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "GAME_SERVER",
+				"class_name": "GameServer",
+			},
+		],
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_classes": ["GameServer"],
 		},
 	],
 }

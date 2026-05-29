@@ -12,6 +12,12 @@
       "sourceType": "node_modules",
       "computedHash": "243ab52746d0f3ab4062b108cff4f81e358d3787b8153f8ef84693c3f7c9fbd8"
     },
+    "durable-objects": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/durable-objects/SKILL.md",
+      "computedHash": "72efa2277fea08f43b393c74abaacc9fa575e20bc63bdc9d46829b8a39352852"
+    },
     "react-start": {
       "source": "@tanstack/react-start",
       "sourceType": "node_modules",

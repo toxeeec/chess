@@ -12,15 +12,19 @@ export default defineConfig({
 	plugins: [
 		tanstackStart(),
 		cloudflareTest({
+			main: "./src/server.ts",
 			miniflare: {
 				compatibilityDate: "2025-09-02",
 				compatibilityFlags: ["nodejs_compat"],
 				d1Databases: { DB: "chess-test" },
+				durableObjects: { GAME_SERVER: "GameServer" },
+				modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm?module"] }],
 			},
 		}),
 	],
 	resolve: { tsconfigPaths: true },
 	test: {
+		includeSource: ["src/**/*.{ts,tsx}"],
 		provide: { TEST_SCHEMA_SQL: testSchemaSql },
 	},
 })

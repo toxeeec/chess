@@ -25,5 +25,18 @@ export default defineConfig({
 		"promise",
 		"vitest",
 	],
-	rules: { "react/react-in-jsx-scope": "off", "typescript/no-explicit-any": "error" },
+	rules: {
+		"no-shadow": "off",
+		"react/react-in-jsx-scope": "off",
+		"typescript/no-explicit-any": "error",
+	},
+	overrides: [
+		{
+			files: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+			rules: {
+				"typescript/no-explicit-any": "off",
+				"typescript/no-unsafe-type-assertion": "off",
+			},
+		},
+	],
 })
