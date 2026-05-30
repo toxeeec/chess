@@ -5,10 +5,39 @@ export type Piece = (typeof PIECES)[number]
 
 type Board = (Piece | undefined)[]
 type BoardState = { board: Board }
-type BoardStore = {
-	getState: () => BoardState
-	subscribe: (listener: () => void) => () => void
-	movePiece: (sourceSquare: number, targetSquare: number) => void
+export type BoardStore = ReturnType<typeof createBoardStore>
+
+export function createBoardStore(fen: string) {
+	let state: BoardState = { board: createBoardFromFen(fen) }
+	const listeners = new Set<() => void>()
+	const notify = () => {
+		for (const listener of listeners) {
+			listener()
+		}
+	}
+
+	return {
+		getState: () => state,
+		setState: (nextState: BoardState) => {
+			state = nextState
+			notify()
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => listeners.delete(listener)
+		},
+		movePiece: (sourceSquare: number, targetSquare: number) => {
+			const movingPiece = state.board[sourceSquare]
+			if (!movingPiece || sourceSquare === targetSquare) return
+
+			const board = [...state.board]
+			board[sourceSquare] = undefined
+			board[targetSquare] = movingPiece
+
+			state = { board }
+			notify()
+		},
+	}
 }
 
 export const BoardStoreContext = createContext<BoardStore | null>(null)
@@ -38,32 +67,6 @@ export function createBoardFromFen(fen: string) {
 
 	if (nextBoard.length !== 64) throw new Error(`Invalid FEN: ${fen}`)
 	return nextBoard
-}
-
-export function createBoardStore(fen: string) {
-	let state: BoardState = { board: createBoardFromFen(fen) }
-	const listeners = new Set<() => void>()
-
-	return {
-		getState: () => state,
-		subscribe: (listener) => {
-			listeners.add(listener)
-			return () => listeners.delete(listener)
-		},
-		movePiece: (sourceSquare, targetSquare) => {
-			const movingPiece = state.board[sourceSquare]
-			if (!movingPiece || sourceSquare === targetSquare) return
-
-			const board = [...state.board]
-			board[sourceSquare] = undefined
-			board[targetSquare] = movingPiece
-
-			state = { board }
-			for (const listener of listeners) {
-				listener()
-			}
-		},
-	} satisfies BoardStore
 }
 
 export function useBoardStore<T>(selector: (state: BoardState) => T) {

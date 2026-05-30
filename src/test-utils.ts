@@ -7,7 +7,7 @@ import { expect } from "vitest"
 import { getRouter } from "./router"
 
 export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit?: RequestInit) {
-	const request = new Request("http://localhost/", requestInit)
+	const request = new Request("https://chess.localhost", requestInit)
 
 	let result: AnyRedirect | Awaited<T> | undefined
 	let error: unknown

@@ -1,7 +1,7 @@
 use crate::square::Square;
 use std::{
     fmt,
-    ops::{BitAnd, BitOrAssign},
+    ops::{BitAnd, BitOr, BitOrAssign, Not, Shl},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -20,9 +20,15 @@ macro_rules! bitboard {
 
 impl Bitboard {
     const EMPTY: Self = Self(0);
+    pub(super) const RANK_3: Self = Self(0xff << 16);
+    pub(super) const RANK_7: Self = Self(0xff << 48);
 
     pub(super) fn contains(self, square: Square) -> bool {
         self & Self::from(square) != Bitboard::EMPTY
+    }
+
+    pub(super) fn empty(self) -> bool {
+        self == Self::EMPTY
     }
 }
 
@@ -72,8 +78,49 @@ impl BitAnd for Bitboard {
     }
 }
 
+impl BitOr for Bitboard {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl Not for Bitboard {
+    type Output = Self;
+    fn not(self) -> Self::Output {
+        Self(!self.0)
+    }
+}
+
+impl Shl<u32> for Bitboard {
+    type Output = Self;
+    fn shl(self, rhs: u32) -> Self::Output {
+        Self(self.0 << rhs)
+    }
+}
+
 impl BitOrAssign<Square> for Bitboard {
     fn bitor_assign(&mut self, rhs: Square) {
         self.0 |= Self::from(rhs).0;
     }
 }
+
+impl Iterator for Bitboard {
+    type Item = Square;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.empty() {
+            return None;
+        };
+
+        let square = Square(self.0.trailing_zeros());
+        self.0 &= self.0 - 1;
+        Some(square)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.0.count_ones() as usize;
+        (len, Some(len))
+    }
+}
+
+impl ExactSizeIterator for Bitboard {}

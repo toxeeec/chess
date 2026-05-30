@@ -50,6 +50,25 @@ impl Default for Board {
 }
 
 impl Board {
+    pub(super) fn white_pawns(&self) -> Bitboard {
+        self.white_pawns
+    }
+
+    pub(super) fn occupied(&self) -> Bitboard {
+        self.black_pawns
+            | self.black_rooks
+            | self.black_knights
+            | self.black_bishops
+            | self.black_queens
+            | self.black_king
+            | self.white_pawns
+            | self.white_rooks
+            | self.white_knights
+            | self.white_bishops
+            | self.white_queens
+            | self.white_king
+    }
+
     pub(super) fn fen(&self) -> String {
         let mut fen = String::new();
 

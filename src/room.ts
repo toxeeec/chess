@@ -2,36 +2,17 @@ import { redirect } from "@tanstack/react-router"
 import { createIsomorphicFn, createMiddleware, createServerFn } from "@tanstack/react-start"
 import { deleteCookie, getCookie } from "@tanstack/react-start/server"
 import { env } from "cloudflare:workers"
-import z from "zod"
+import { z } from "zod"
 
 import { hasGameForSession } from "./room.server"
+import { jsonCodec } from "./zod"
 
 export const ROOM_SESSION_COOKIE_NAME = "room-session"
 
 export const roomIdSchema = z.nanoid().brand<"RoomId">()
 export type RoomId = z.infer<typeof roomIdSchema>
 
-export const roomSessionCodec = z.codec(
-	z.string(),
-	z.object({ token: z.string(), roomId: roomIdSchema }),
-	{
-		decode: (jsonString, ctx) => {
-			try {
-				// oxlint-disable-next-line
-				return JSON.parse(jsonString) as any
-			} catch (err) {
-				ctx.issues.push({
-					code: "invalid_format",
-					format: "json",
-					input: jsonString,
-					message: String(err),
-				})
-				return z.NEVER
-			}
-		},
-		encode: (value) => JSON.stringify(value),
-	},
-)
+export const roomSessionCodec = jsonCodec(z.object({ token: z.string(), roomId: roomIdSchema }))
 export type RoomSession = z.infer<typeof roomSessionCodec>
 
 export const getRoomSessionFromCookie = createIsomorphicFn()
@@ -72,8 +53,9 @@ export const roomSessionMiddleware = createMiddleware().server(async ({ next }) 
 	return next({ context: { roomSession } })
 })
 
-export const getGameFen = createServerFn()
+export const getGameState = createServerFn()
 	.middleware([roomSessionMiddleware])
 	.handler(async ({ context }) => {
-		return env.GAME_SERVER.getByName(context.roomSession.roomId).fen()
+		const { fen, moves } = await env.GAME_SERVER.getByName(context.roomSession.roomId).state()
+		return { fen, moves }
 	})

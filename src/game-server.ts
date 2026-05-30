@@ -10,7 +10,14 @@ export class GameServer extends DurableObject {
 		this.#wasmGameServer = new WasmGameServer(ctx, env)
 	}
 
-	fen() {
-		return this.#wasmGameServer.fen()
+	state() {
+		const { fen, moves } = this.#wasmGameServer.state()
+		return { fen, moves }
 	}
+
+	fetch(request: Request) {
+		return this.#wasmGameServer.fetch(request)
+	}
+
+	webSocketClose() {}
 }

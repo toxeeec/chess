@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
-import z from "zod"
+import { useState } from "react"
+import { z } from "zod"
 
+import { createBoardFromFen, createBoardStore } from "#/board-store"
 import { Chessboard } from "#/chessboard"
-import { getGameFen, ensureRoomSessionMatches, roomIdSchema } from "#/room"
+import { getGameState, ensureRoomSessionMatches, roomIdSchema } from "#/room"
+import { useLiveRoom } from "#/use-live-room"
 
 const paramsSchema = z.object({ roomId: roomIdSchema })
 
@@ -15,16 +18,24 @@ export const Route = createFileRoute("/$roomId")({
 		},
 	},
 	beforeLoad: ({ params }) => ensureRoomSessionMatches(params.roomId),
-	loader: () => getGameFen(),
+	loader: () => getGameState(),
 	component: RouteComponent,
 })
 
 function RouteComponent() {
-	const fen = Route.useLoaderData()
+	const { fen } = Route.useLoaderData()
+	const { roomId } = Route.useParams()
+
+	const [store] = useState(() => createBoardStore(fen))
+
+	useLiveRoom({
+		roomId,
+		onSnapshot: (state) => store.setState({ board: createBoardFromFen(state.fen) }),
+	})
 
 	return (
 		<div className="h-full content-center">
-			<Chessboard fen={fen} />
+			<Chessboard store={store} />
 		</div>
 	)
 }

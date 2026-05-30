@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoomIdRouteImport } from './routes/$roomId'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomIdWsRouteImport } from './routes/$roomId.ws'
 
 const RoomIdRoute = RoomIdRouteImport.update({
   id: '/$roomId',
@@ -22,31 +23,39 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomIdWsRoute = RoomIdWsRouteImport.update({
+  id: '/ws',
+  path: '/ws',
+  getParentRoute: () => RoomIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/$roomId': typeof RoomIdRoute
+  '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/$roomId': typeof RoomIdRoute
+  '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/$roomId': typeof RoomIdRoute
+  '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$roomId'
+  fullPaths: '/' | '/$roomId' | '/$roomId/ws'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$roomId'
-  id: '__root__' | '/' | '/$roomId'
+  to: '/' | '/$roomId' | '/$roomId/ws'
+  id: '__root__' | '/' | '/$roomId' | '/$roomId/ws'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  RoomIdRoute: typeof RoomIdRoute
+  RoomIdRoute: typeof RoomIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +74,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$roomId/ws': {
+      id: '/$roomId/ws'
+      path: '/ws'
+      fullPath: '/$roomId/ws'
+      preLoaderRoute: typeof RoomIdWsRouteImport
+      parentRoute: typeof RoomIdRoute
+    }
   }
 }
 
+interface RoomIdRouteChildren {
+  RoomIdWsRoute: typeof RoomIdWsRoute
+}
+
+const RoomIdRouteChildren: RoomIdRouteChildren = {
+  RoomIdWsRoute: RoomIdWsRoute,
+}
+
+const RoomIdRouteWithChildren =
+  RoomIdRoute._addFileChildren(RoomIdRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  RoomIdRoute: RoomIdRoute,
+  RoomIdRoute: RoomIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

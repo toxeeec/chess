@@ -1,11 +1,11 @@
 import { Modifier, type DragOperation } from "@dnd-kit/abstract"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
-import { useRef, useState } from "react"
+import { useRef } from "react"
 
 import { clsx } from "#/clsx"
 
-import { BoardStoreContext, createBoardStore, useBoardStore, type Piece } from "./board-store"
+import { BoardStoreContext, useBoardStore, type BoardStore, type Piece } from "./board-store"
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1] as const
@@ -42,9 +42,8 @@ class SnapToPointer extends Modifier {
 	}
 }
 
-export function Chessboard({ fen }: { fen: string }) {
+export function Chessboard({ store }: { store: BoardStore }) {
 	const ref = useRef<HTMLDivElement>(null)
-	const [store] = useState(() => createBoardStore(fen))
 
 	return (
 		<BoardStoreContext value={store}>

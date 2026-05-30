@@ -10,8 +10,9 @@ import {
 	roomIdSchema,
 	roomSessionCodec,
 	type RoomSession,
+	type RoomId,
 } from "./room"
-import { redirectToRoom } from "./room.server"
+import { connectToRoomWebSocket, redirectToRoom } from "./room.server"
 import { gamesTable } from "./schema.server"
 import { expectRedirect, runInStartContext } from "./test-utils"
 
@@ -32,16 +33,6 @@ function roomSessionRequest(roomSession: RoomSession) {
 			cookie: `${ROOM_SESSION_COOKIE_NAME}=${encodeURIComponent(roomSessionCodec.encode(roomSession))}`,
 		},
 	} as const satisfies RequestInit
-}
-
-async function runRoomSessionMiddleware(requestInit?: RequestInit) {
-	return runInStartContext(
-		() =>
-			roomSessionMiddleware.options.server!({
-				next: async (options?: unknown) => options,
-			} as any),
-		requestInit,
-	)
 }
 
 describe("redirectToRoom", () => {
@@ -113,6 +104,16 @@ describe("ensureRoomSessionMatches", () => {
 	})
 })
 
+async function runRoomSessionMiddleware(requestInit?: RequestInit) {
+	return runInStartContext(
+		() =>
+			roomSessionMiddleware.options.server!({
+				next: async (options?: unknown) => options,
+			} as any),
+		requestInit,
+	)
+}
+
 describe("roomSessionMiddleware", () => {
 	it("deletes the cookie and throws unauthorized without a room session", async () => {
 		using deleteCookieSpy = vi.spyOn(server, "deleteCookie")
@@ -142,5 +143,90 @@ describe("roomSessionMiddleware", () => {
 			}),
 		)
 		expect(deleteCookieSpy).not.toHaveBeenCalled()
+	})
+})
+
+function connectToRoomWebSocketRequest(
+	roomSession: RoomSession,
+	roomId: RoomId,
+	requestInit?: RequestInit,
+) {
+	return connectToRoomWebSocket(
+		new Request("https://chess.localhost", requestInit),
+		roomSession,
+		roomId,
+	)
+}
+
+function waitForWebSocketMessage(webSocket: WebSocket) {
+	return new Promise<MessageEvent>((resolve, reject) => {
+		const timeout = setTimeout(
+			() => reject(new Error("Timed out waiting for websocket message")),
+			100,
+		)
+
+		webSocket.addEventListener(
+			"message",
+			(event) => {
+				clearTimeout(timeout)
+				resolve(event)
+			},
+			{ once: true },
+		)
+	})
+}
+
+describe("connectToRoomWebSocket", () => {
+	it("returns upgrade required for non-websocket requests", async () => {
+		const response = await connectToRoomWebSocketRequest(
+			{ roomId: ROOM_ID, token: "white-token" },
+			ROOM_ID,
+		)
+
+		expect(response.status).toBe(426)
+		expect(response.headers.get("Upgrade")).toBe("websocket")
+	})
+
+	it("returns forbidden when the requested room differs from the session room", async () => {
+		const response = await connectToRoomWebSocketRequest(
+			{ roomId: OTHER_ROOM_ID, token: "white-token" },
+			ROOM_ID,
+			{
+				headers: { Upgrade: "websocket" },
+			},
+		)
+
+		expect(response.status).toBe(403)
+	})
+
+	it("upgrades matching room websocket requests", async () => {
+		const response = await connectToRoomWebSocketRequest(
+			{ roomId: ROOM_ID, token: "white-token" },
+			ROOM_ID,
+			{
+				headers: { Upgrade: "websocket" },
+			},
+		)
+
+		expect(response.status).toBe(101)
+		expect(response.webSocket).toBeInstanceOf(WebSocket)
+
+		const webSocket = Object.assign(response.webSocket!, {
+			[Symbol.dispose]() {
+				webSocket.close()
+			},
+		})
+		webSocket.accept()
+		const event = await waitForWebSocketMessage(webSocket)
+		const message = JSON.parse(event.data) as any
+
+		expect(message).toEqual({
+			type: "snapshot",
+			state: {
+				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
+				moves: expect.any(String),
+			},
+		})
+		expect(message.state.moves.split(" ")).toHaveLength(16)
 	})
 })
