@@ -54,9 +54,12 @@ export function Chessboard({ store }: { store: BoardStore }) {
 						element: () => ref.current,
 					}),
 				]}
+				onDragStart={({ operation: { source } }) => {
+					store.setDraggedPieceSquare(source ? Number(source.id) : null)
+				}}
 				onDragEnd={({ operation: { source, target } }) => {
-					if (!source || !target) return
-					store.movePiece(Number(source.id), Number(target.id))
+					if (source && target) store.movePiece(Number(source.id), Number(target.id))
+					store.setDraggedPieceSquare(null)
 				}}
 			>
 				<div className="relative grid size-[round(down,80vmin,8px)] grid-cols-8 justify-self-center">
@@ -72,6 +75,10 @@ export function Chessboard({ store }: { store: BoardStore }) {
 
 function BoardSquare({ square }: { square: number }) {
 	const piece = useBoardStore((store) => store.board[square])
+	const isLegalMoveTarget = useBoardStore((store) =>
+		store.legalMoves.some(({ to }) => to === square),
+	)
+	const disabled = useBoardStore((store) => !store.legalMoves.some(({ from }) => from === square))
 	const { isDropTarget, ref } = useDroppable({
 		id: square,
 	})
@@ -88,8 +95,26 @@ function BoardSquare({ square }: { square: number }) {
 		>
 			{Square.getFile(square) === 0 && <Coordinate square={square} rank />}
 			{Square.getRank(square) === 7 && <Coordinate square={square} file />}
-			{piece !== undefined && <DraggablePiece piece={piece} square={square} />}
+			{isLegalMoveTarget && <LegalMoveDot square={square} />}
+			{piece && <DraggablePiece piece={piece} square={square} disabled={disabled} />}
 		</div>
+	)
+}
+
+function LegalMoveDot({ square }: { square: number }) {
+	const visible = useBoardStore(
+		(store) =>
+			store.draggedPieceSquare !== null &&
+			store.legalMoves.some(({ from, to }) => from === store.draggedPieceSquare && to === square),
+	)
+
+	return (
+		<span
+			className={clsx(
+				"pointer-events-none invisible absolute size-1/4 rounded-full bg-neutral-400",
+				visible && "visible",
+			)}
+		/>
 	)
 }
 
@@ -113,8 +138,16 @@ function Coordinate({
 	)
 }
 
-function DraggablePiece({ piece, square }: { piece: Piece; square: number }) {
-	const { ref, handleRef } = useDraggable({ id: square })
+function DraggablePiece({
+	piece,
+	square,
+	disabled,
+}: {
+	piece: Piece
+	square: number
+	disabled: boolean
+}) {
+	const { ref, handleRef } = useDraggable({ id: square, disabled })
 
 	return (
 		<button
@@ -122,8 +155,10 @@ function DraggablePiece({ piece, square }: { piece: Piece; square: number }) {
 				ref(element)
 				handleRef(element)
 			}}
-			className="absolute z-10 size-full cursor-grab touch-none text-[3vmin] leading-none font-bold text-stone-100 select-none active:cursor-grabbing"
-			type="button"
+			className={clsx(
+				"absolute z-10 size-full touch-none text-[3vmin] leading-none font-bold text-stone-100 select-none",
+				!disabled && "cursor-grab active:cursor-grabbing",
+			)}
 		>
 			{piece}
 		</button>

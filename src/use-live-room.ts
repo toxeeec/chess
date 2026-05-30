@@ -5,9 +5,14 @@ import { z } from "zod"
 import type { RoomId } from "./room"
 import { jsonCodec } from "./zod"
 
+const movesRegex = /^(?:[a-h][1-8][a-h][1-8](?: [a-h][1-8][a-h][1-8])*)?$/i
+
 export const gameStateSchema = z.object({
 	fen: z.string(),
-	moves: z.string(),
+	moves: z
+		.string()
+		.regex(movesRegex, "Invalid moves format")
+		.transform((moves) => (moves === "" ? [] : moves.split(" "))),
 })
 
 export const liveRoomMessageCodec = jsonCodec(
