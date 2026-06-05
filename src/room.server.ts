@@ -2,7 +2,7 @@ import { redirect } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 import { setCookie } from "@tanstack/react-start/server"
 import { env } from "cloudflare:workers"
-import { and, eq, or, sql } from "drizzle-orm"
+import { and, eq, or } from "drizzle-orm"
 
 import { db } from "./db.server"
 import { nanoid } from "./nanoid.server"
@@ -15,6 +15,8 @@ import {
 	type RoomSession,
 } from "./room"
 import { gamesTable } from "./schema.server"
+
+const PLAYER_HEADER = "Player-Color"
 
 export const redirectToRoom = createServerFn().handler(async () => {
 	let roomSession = getRoomSessionFromCookie()
@@ -36,9 +38,9 @@ async function createRoomSession() {
 	return roomSession
 }
 
-export async function hasGameForSession(roomSession: RoomSession) {
-	const [exists] = await db
-		.select({ exists: sql`1` })
+export async function getGameByRoomSession(roomSession: RoomSession) {
+	const [game] = await db
+		.select()
 		.from(gamesTable)
 		.where(
 			and(
@@ -48,10 +50,15 @@ export async function hasGameForSession(roomSession: RoomSession) {
 		)
 		.limit(1)
 
-	return Boolean(exists)
+	return game
 }
 
-export function connectToRoomWebSocket(request: Request, roomSession: RoomSession, roomId: RoomId) {
+export function connectToRoomWebSocket(
+	request: Request,
+	roomSession: RoomSession,
+	player: "white" | "black",
+	roomId: RoomId,
+) {
 	if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
 		return new Response(null, {
 			status: 426,
@@ -63,10 +70,13 @@ export function connectToRoomWebSocket(request: Request, roomSession: RoomSessio
 		return new Response(null, { status: 403 })
 	}
 
-	return env.GAME_SERVER.getByName(roomId).fetch(request)
+	const headers = new Headers(request.headers)
+	headers.set(PLAYER_HEADER, player)
+
+	return env.GAME_SERVER.getByName(roomId).fetch(new Request(request, { headers }))
 }
 
-function generateRoomId() {
+export function generateRoomId() {
 	return roomIdSchema.parse(nanoid())
 }
 

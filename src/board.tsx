@@ -42,7 +42,7 @@ class SnapToPointer extends Modifier {
 	}
 }
 
-export function Chessboard({ store }: { store: BoardStore }) {
+export function Board({ store }: { store: BoardStore }) {
 	const ref = useRef<HTMLDivElement>(null)
 
 	return (
@@ -58,7 +58,7 @@ export function Chessboard({ store }: { store: BoardStore }) {
 					store.setDraggedPieceSquare(source ? Number(source.id) : null)
 				}}
 				onDragEnd={({ operation: { source, target } }) => {
-					if (source && target) store.movePiece(Number(source.id), Number(target.id))
+					if (source && target) store.movePiece({ from: Number(source.id), to: Number(target.id) })
 					store.setDraggedPieceSquare(null)
 				}}
 			>

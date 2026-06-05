@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { z } from "zod"
 
+import { Board } from "#/board"
 import { createBoardStore } from "#/board-store"
-import { Chessboard } from "#/chessboard"
 import { getGameState, ensureRoomSessionMatches, roomIdSchema } from "#/room"
-import { gameStateSchema, useLiveRoom } from "#/use-live-room"
+import { moveCodec, snapshotMessageSchema, useLiveRoom } from "#/use-live-room"
 
 const paramsSchema = z.object({ roomId: roomIdSchema })
 
@@ -23,15 +23,39 @@ export const Route = createFileRoute("/$roomId")({
 })
 
 function RouteComponent() {
-	const state = gameStateSchema.parse(Route.useLoaderData())
+	const snapshot = snapshotMessageSchema.parse(Route.useLoaderData())
 	const { roomId } = Route.useParams()
+	const lastRevision = useRef(-1)
 
-	const [store] = useState(() => createBoardStore(state))
-	useLiveRoom({ roomId, onSnapshot: store.setState })
+	const [store] = useState(() =>
+		createBoardStore({
+			snapshot,
+			onMove: (move) => {
+				send({ type: "move", data: moveCodec.encode(move) })
+			},
+		}),
+	)
+	const { send, reconnect } = useLiveRoom({
+		roomId,
+		onSnapshot: (snapshot) => {
+			if (snapshot.revision <= lastRevision.current) return
+			store.setState(snapshot)
+			lastRevision.current = snapshot.revision
+		},
+		onMove: ({ revision, legalMoves }) => {
+			if (revision <= lastRevision.current) return
+			if (revision !== lastRevision.current + 1) {
+				reconnect()
+			} else {
+				store.setLegalMoves(legalMoves)
+				lastRevision.current = revision
+			}
+		},
+	})
 
 	return (
 		<div className="h-full content-center">
-			<Chessboard store={store} />
+			<Board store={store} />
 		</div>
 	)
 }

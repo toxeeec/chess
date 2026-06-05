@@ -11,7 +11,7 @@ export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit
 
 	let result: AnyRedirect | Awaited<T> | undefined
 	let error: unknown
-	await server.requestHandler(async () => {
+	const response = await server.requestHandler(async () => {
 		result = await runWithStartContext(
 			{
 				getRouter,
@@ -34,15 +34,9 @@ export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit
 		return new Response()
 	})(request, {})
 
-	if (error) throw error
-	return result!
+	return { result: result!, error, response }
 }
 
-export async function expectRedirect<T, TOptions>(
-	promise: T | Promise<T>,
-	options: ValidateRedirectOptions<RegisteredRouter, TOptions>,
-) {
-	await expect(Promise.try(() => promise)).resolves.toEqual(
-		expect.objectContaining({ options: { statusCode: 307, ...options } }),
-	)
+export function redirect<TOptions>(options: ValidateRedirectOptions<RegisteredRouter, TOptions>) {
+	return expect.objectContaining({ options: { statusCode: 307, ...options } })
 }

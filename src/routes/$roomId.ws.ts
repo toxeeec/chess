@@ -17,8 +17,8 @@ export const Route = createFileRoute("/$roomId/ws")({
 	server: {
 		middleware: [roomSessionMiddleware],
 		handlers: {
-			GET: ({ request, context: { roomSession }, params: { roomId } }) =>
-				connectToRoomWebSocket(request, roomSession, roomId),
+			GET: ({ request, context: { roomSession, player }, params: { roomId } }) =>
+				connectToRoomWebSocket(request, roomSession, player, roomId),
 		},
 	},
 })

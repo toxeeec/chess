@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Square(pub(super) u32);
 
 impl Square {
@@ -6,10 +6,12 @@ impl Square {
         debug_assert!(square < 64);
         Self(square)
     }
-}
 
-impl From<u32> for Square {
-    fn from(square: u32) -> Self {
-        Self(square)
+    pub(super) const fn backward<const IS_WHITE: bool>(self, n: u32) -> Self {
+        if IS_WHITE {
+            Square::new(self.0 - n * 8)
+        } else {
+            Square::new(self.0 + n * 8)
+        }
     }
 }

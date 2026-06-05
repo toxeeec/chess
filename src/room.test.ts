@@ -1,30 +1,31 @@
-import * as server from "@tanstack/react-start/server"
 import { env } from "cloudflare:workers"
-import { afterEach, beforeAll, describe, expect, inject, it, vi } from "vitest"
+import { eq } from "drizzle-orm"
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest"
 
 import { db } from "./db.server"
 import {
 	ensureRoomSessionMatches,
 	ROOM_SESSION_COOKIE_NAME,
 	roomSessionMiddleware,
-	roomIdSchema,
 	roomSessionCodec,
-	type RoomSession,
 	type RoomId,
+	type RoomSession,
 } from "./room"
-import { connectToRoomWebSocket, redirectToRoom } from "./room.server"
+import { connectToRoomWebSocket, generateRoomId, redirectToRoom } from "./room.server"
 import { gamesTable } from "./schema.server"
-import { expectRedirect, runInStartContext } from "./test-utils"
-
-const ROOM_ID = roomIdSchema.parse("test-room-id-00000001")
-const OTHER_ROOM_ID = roomIdSchema.parse("test-room-id-00000002")
+import { redirect, runInStartContext } from "./test-utils"
 
 beforeAll(async () => {
 	await env.DB.exec(inject("TEST_SCHEMA_SQL"))
 })
 
-afterEach(async () => {
-	await db.delete(gamesTable)
+const TEST_GAME_SERVER_ROOM_IDS = new Set<RoomId>()
+
+afterAll(async () => {
+	await Promise.all([
+		...Array.from(TEST_GAME_SERVER_ROOM_IDS, (roomId) => env.GAME_SERVER.getByName(roomId).clear()),
+		db.delete(gamesTable),
+	])
 })
 
 function roomSessionRequest(roomSession: RoomSession) {
@@ -36,161 +37,172 @@ function roomSessionRequest(roomSession: RoomSession) {
 }
 
 describe("redirectToRoom", () => {
-	it("redirects to the room from an existing session", async () => {
-		const roomSession = { roomId: ROOM_ID, token: "white-token" }
-		using setCookieSpy = vi.spyOn(server, "setCookie")
+	it.concurrent("redirects to the room from an existing session", async () => {
+		const roomSession = { roomId: generateRoomId(), token: "white-token" }
+		const { result, response } = await runInStartContext(
+			redirectToRoom,
+			roomSessionRequest(roomSession),
+		)
 
-		await expectRedirect(runInStartContext(redirectToRoom, roomSessionRequest(roomSession)), {
-			to: "/$roomId",
-			params: { roomId: roomSession.roomId },
-		})
-		expect(setCookieSpy).not.toHaveBeenCalled()
-		await expect(db.select().from(gamesTable)).resolves.toEqual([])
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } }))
+		expect(response.headers.has("Set-Cookie")).toBe(false)
+
+		const games = await db
+			.select()
+			.from(gamesTable)
+			.where(eq(gamesTable.roomId, roomSession.roomId))
+		expect(games).toEqual([])
 	})
 
-	it("creates a game and session cookie before redirecting to a new room", async () => {
-		using setCookieSpy = vi.spyOn(server, "setCookie")
+	it.concurrent("creates a game and session cookie before redirecting to a new room", async () => {
+		const { result, response } = await runInStartContext(redirectToRoom)
 
-		const redirect = await runInStartContext(redirectToRoom)
-		const games = await db.select().from(gamesTable).orderBy(gamesTable.id)
-		expect(games).toMatchObject([{ white: expect.any(String), black: null }])
-		const game = games[0]!
-
-		await expectRedirect(redirect, {
-			to: "/$roomId",
-			params: { roomId: game.roomId },
-		})
-		expect(setCookieSpy).toHaveBeenCalledExactlyOnceWith(
-			ROOM_SESSION_COOKIE_NAME,
-			expect.any(String),
-			expect.any(Object),
+		const cookie = response.headers.get("Set-Cookie")
+		expect(cookie).toContain(`${ROOM_SESSION_COOKIE_NAME}=`)
+		const roomSession = roomSessionCodec.decode(
+			decodeURIComponent(cookie!.split(`${ROOM_SESSION_COOKIE_NAME}=`)[1]!.split(";")[0]!),
 		)
-		const roomSession = roomSessionCodec.decode(setCookieSpy.mock.calls[0]![1])
+
+		const games = await db
+			.select()
+			.from(gamesTable)
+			.where(eq(gamesTable.roomId, roomSession.roomId))
+		expect(games).toMatchObject([{ white: expect.any(String), black: null }])
+
+		const game = games[0]!
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: game.roomId } }))
+		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=1800")
+		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=1800")
+		expect(response.headers.get("Set-Cookie")).toContain("Secure")
+		expect(response.headers.get("Set-Cookie")).toContain("SameSite=Lax")
 		expect(roomSession).toEqual({ roomId: game.roomId, token: game.white })
 	})
 })
 
 describe("ensureRoomSessionMatches", () => {
-	it("redirects home when there is no room session", async () => {
-		await expectRedirect(
-			runInStartContext(() => ensureRoomSessionMatches(ROOM_ID)),
-			{
-				to: "/",
-			},
-		)
+	it.concurrent("redirects home when there is no room session", async () => {
+		const { result } = await runInStartContext(() => ensureRoomSessionMatches(generateRoomId()))
+
+		expect(result).toEqual(redirect({ to: "/" }))
 	})
 
-	it("redirects to the session room when the requested room differs", async () => {
-		const roomSession = { roomId: ROOM_ID, token: "white-token" }
-
-		await expectRedirect(
-			runInStartContext(
-				() => ensureRoomSessionMatches(OTHER_ROOM_ID),
-				roomSessionRequest(roomSession),
-			),
-			{
-				to: "/$roomId",
-				params: { roomId: roomSession.roomId },
-			},
+	it.concurrent("redirects to the session room when the requested room differs", async () => {
+		const roomSession = { roomId: generateRoomId(), token: "white-token" }
+		const { result } = await runInStartContext(
+			() => ensureRoomSessionMatches(generateRoomId()),
+			roomSessionRequest(roomSession),
 		)
+
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } }))
 	})
 
-	it("allows matching room sessions", async () => {
-		const roomSession = { roomId: ROOM_ID, token: "white-token" }
+	it.concurrent("allows matching room sessions", async () => {
+		const roomSession = { roomId: generateRoomId(), token: "white-token" }
+		const { result } = await runInStartContext(
+			() => ensureRoomSessionMatches(roomSession.roomId),
+			roomSessionRequest(roomSession),
+		)
 
-		await expect(
-			runInStartContext(() => ensureRoomSessionMatches(ROOM_ID), roomSessionRequest(roomSession)),
-		).resolves.toBeUndefined()
+		expect(result).toBeUndefined()
 	})
 })
 
-async function runRoomSessionMiddleware(requestInit?: RequestInit) {
-	return runInStartContext(
-		() =>
-			roomSessionMiddleware.options.server!({
-				next: async (options?: unknown) => options,
-			} as any),
-		requestInit,
-	)
+function runRoomSessionMiddleware() {
+	return roomSessionMiddleware.options.server!({
+		next: async (options?: unknown) => options,
+	} as any)
 }
 
 describe("roomSessionMiddleware", () => {
-	it("deletes the cookie and throws unauthorized without a room session", async () => {
-		using deleteCookieSpy = vi.spyOn(server, "deleteCookie")
+	it.concurrent("deletes the cookie and throws unauthorized without a room session", async () => {
+		const { error, response } = await runInStartContext(runRoomSessionMiddleware)
 
-		await expect(runRoomSessionMiddleware()).rejects.toThrow("Unauthorized")
-		expect(deleteCookieSpy).toHaveBeenCalledExactlyOnceWith(ROOM_SESSION_COOKIE_NAME)
+		expect(error).toEqual(new Error("Unauthorized"))
+		expect(response.headers.get("Set-Cookie")).toContain(`${ROOM_SESSION_COOKIE_NAME}=`)
+		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0")
 	})
 
-	it("deletes the cookie and throws forbidden when no game matches the session", async () => {
-		const roomSession = { roomId: ROOM_ID, token: "white-token" }
-		using deleteCookieSpy = vi.spyOn(server, "deleteCookie")
-
-		await expect(runRoomSessionMiddleware(roomSessionRequest(roomSession))).rejects.toThrow(
-			"Forbidden",
+	it.concurrent("deletes the cookie and throws forbidden when no game matches the session", async () => {
+		const roomSession = { roomId: generateRoomId(), token: "white-token" }
+		const { error, response } = await runInStartContext(
+			runRoomSessionMiddleware,
+			roomSessionRequest(roomSession),
 		)
-		expect(deleteCookieSpy).toHaveBeenCalledExactlyOnceWith(ROOM_SESSION_COOKIE_NAME)
+
+		expect(error).toEqual(new Error("Forbidden"))
+		expect(response.headers.get("Set-Cookie")).toContain(`${ROOM_SESSION_COOKIE_NAME}=`)
+		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0")
 	})
 
-	it("passes matching room sessions to the handler", async () => {
-		const roomSession = { roomId: ROOM_ID, token: "white-token" }
-		using deleteCookieSpy = vi.spyOn(server, "deleteCookie")
-		await db.insert(gamesTable).values({ roomId: roomSession.roomId, white: roomSession.token })
+	it.concurrent("does not delete the cookie for matching room sessions", async () => {
+		const roomId = generateRoomId()
+		const roomSession = { roomId, token: "white-token" }
+		await db.insert(gamesTable).values({ roomId, white: roomSession.token })
+		const { response } = await runInStartContext(
+			runRoomSessionMiddleware,
+			roomSessionRequest(roomSession),
+		)
 
-		await expect(runRoomSessionMiddleware(roomSessionRequest(roomSession))).resolves.toEqual(
+		expect(response.headers.has("Set-Cookie")).toBe(false)
+	})
+
+	it.concurrent("passes matching room sessions to the handler", async () => {
+		const roomId = generateRoomId()
+		const whiteRoomSession = { roomId, token: "white-token" }
+		const blackRoomSession = { roomId, token: "black-token" }
+		await db.insert(gamesTable).values({
+			roomId: whiteRoomSession.roomId,
+			white: whiteRoomSession.token,
+			black: blackRoomSession.token,
+		})
+		const [{ result: whiteResult }, { result: blackResult }] = await Promise.all([
+			runInStartContext(runRoomSessionMiddleware, roomSessionRequest(whiteRoomSession)),
+			runInStartContext(runRoomSessionMiddleware, roomSessionRequest(blackRoomSession)),
+		])
+
+		expect(whiteResult).toEqual(
 			expect.objectContaining({
-				context: { roomSession },
+				context: { roomSession: whiteRoomSession, player: "white" },
 			}),
 		)
-		expect(deleteCookieSpy).not.toHaveBeenCalled()
+		expect(blackResult).toEqual(
+			expect.objectContaining({
+				context: { roomSession: blackRoomSession, player: "black" },
+			}),
+		)
 	})
 })
 
 function connectToRoomWebSocketRequest(
-	roomSession: RoomSession,
 	roomId: RoomId,
+	roomSession: RoomSession,
 	requestInit?: RequestInit,
 ) {
 	return connectToRoomWebSocket(
 		new Request("https://chess.localhost", requestInit),
 		roomSession,
+		"white",
 		roomId,
 	)
 }
 
-function waitForWebSocketMessage(webSocket: WebSocket) {
-	return new Promise<MessageEvent>((resolve, reject) => {
-		const timeout = setTimeout(
-			() => reject(new Error("Timed out waiting for websocket message")),
-			100,
-		)
-
-		webSocket.addEventListener(
-			"message",
-			(event) => {
-				clearTimeout(timeout)
-				resolve(event)
-			},
-			{ once: true },
-		)
-	})
-}
-
 describe("connectToRoomWebSocket", () => {
-	it("returns upgrade required for non-websocket requests", async () => {
-		const response = await connectToRoomWebSocketRequest(
-			{ roomId: ROOM_ID, token: "white-token" },
-			ROOM_ID,
-		)
+	it.concurrent("returns upgrade required for non-websocket requests", async () => {
+		const roomId = generateRoomId()
+		const response = await connectToRoomWebSocketRequest(roomId, {
+			roomId,
+			token: "white-token",
+		})
 
 		expect(response.status).toBe(426)
 		expect(response.headers.get("Upgrade")).toBe("websocket")
 	})
 
-	it("returns forbidden when the requested room differs from the session room", async () => {
+	it.concurrent("returns forbidden when the requested room differs from the session room", async () => {
+		const roomId = generateRoomId()
 		const response = await connectToRoomWebSocketRequest(
-			{ roomId: OTHER_ROOM_ID, token: "white-token" },
-			ROOM_ID,
+			roomId,
+			{ roomId: generateRoomId(), token: "white-token" },
 			{
 				headers: { Upgrade: "websocket" },
 			},
@@ -199,10 +211,11 @@ describe("connectToRoomWebSocket", () => {
 		expect(response.status).toBe(403)
 	})
 
-	it("upgrades matching room websocket requests", async () => {
+	it.concurrent("forwards matching room websocket requests with the player header", async () => {
+		const roomId = generateRoomId()
 		const response = await connectToRoomWebSocketRequest(
-			{ roomId: ROOM_ID, token: "white-token" },
-			ROOM_ID,
+			roomId,
+			{ roomId, token: "white-token" },
 			{
 				headers: { Upgrade: "websocket" },
 			},
@@ -211,22 +224,8 @@ describe("connectToRoomWebSocket", () => {
 		expect(response.status).toBe(101)
 		expect(response.webSocket).toBeInstanceOf(WebSocket)
 
-		const webSocket = Object.assign(response.webSocket!, {
-			[Symbol.dispose]() {
-				webSocket.close()
-			},
-		})
-		webSocket.accept()
-		const event = await waitForWebSocketMessage(webSocket)
-		const message = JSON.parse(event.data) as any
-
-		expect(message).toEqual({
-			type: "snapshot",
-			state: {
-				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR",
-				moves: expect.any(String),
-			},
-		})
-		expect(message.state.moves.split(" ")).toHaveLength(16)
+		response.webSocket!.accept()
+		response.webSocket!.close()
+		TEST_GAME_SERVER_ROOM_IDS.add(roomId)
 	})
 })

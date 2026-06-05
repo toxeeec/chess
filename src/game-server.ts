@@ -10,13 +10,25 @@ export class GameServer extends DurableObject {
 		this.#wasmGameServer = new WasmGameServer(ctx, env)
 	}
 
-	state() {
-		const { fen, moves } = this.#wasmGameServer.state()
-		return { fen, moves }
+	snapshot() {
+		const { revision, fen, legalMoves } = this.#wasmGameServer.snapshot()
+		return { revision, fen, legalMoves }
+	}
+
+	async clear() {
+		if (import.meta.env.MODE !== "test") {
+			throw new Error("GameServer.clear can only be called in tests")
+		}
+
+		await Promise.all([this.ctx.storage.deleteAlarm(), this.ctx.storage.deleteAll()])
 	}
 
 	fetch(request: Request) {
 		return this.#wasmGameServer.fetch(request)
+	}
+
+	webSocketMessage(ws: WebSocket, message: string) {
+		return this.#wasmGameServer.webSocketMessage(ws, message)
 	}
 
 	webSocketClose() {}

@@ -4,7 +4,7 @@ import { deleteCookie, getCookie } from "@tanstack/react-start/server"
 import { env } from "cloudflare:workers"
 import { z } from "zod"
 
-import { hasGameForSession } from "./room.server"
+import { getGameByRoomSession } from "./room.server"
 import { jsonCodec } from "./zod"
 
 export const ROOM_SESSION_COOKIE_NAME = "room-session"
@@ -45,17 +45,23 @@ export const roomSessionMiddleware = createMiddleware().server(async ({ next }) 
 		throw new Error("Unauthorized")
 	}
 
-	if (!(await hasGameForSession(roomSession))) {
+	const game = await getGameByRoomSession(roomSession)
+
+	if (!game) {
 		deleteCookie(ROOM_SESSION_COOKIE_NAME)
 		throw new Error("Forbidden")
 	}
 
-	return next({ context: { roomSession } })
+	const player = roomSession.token === game.white ? ("white" as const) : ("black" as const)
+
+	return next({ context: { roomSession, player } })
 })
 
 export const getGameState = createServerFn()
 	.middleware([roomSessionMiddleware])
 	.handler(async ({ context }) => {
-		const { fen, moves } = await env.GAME_SERVER.getByName(context.roomSession.roomId).state()
-		return { fen, moves }
+		const { revision, fen, legalMoves } = await env.GAME_SERVER.getByName(
+			context.roomSession.roomId,
+		).snapshot()
+		return { revision, fen, legalMoves }
 	})

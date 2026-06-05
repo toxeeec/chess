@@ -1,12 +1,15 @@
 use crate::{bitboard::Bitboard, board::Board, moves::Move, square::Square};
 
-pub(super) fn add_pawn_moves(board: &Board, list: &mut Vec<Move>) {
-    let empty = !board.occupied();
+pub(super) fn add_pawn_moves<const IS_WHITE: bool>(board: &Board, list: &mut Vec<Move>) {
+    let empty = board.empty();
+    let pawns = board.pawns::<IS_WHITE>();
 
-    let single_pushes = ((board.white_pawns() & !Bitboard::RANK_7) << 8) & empty;
-    let double_pushes = ((single_pushes & Bitboard::RANK_3) << 8) & empty;
+    let single_pushes =
+        ((pawns & !Bitboard::relative_rank::<IS_WHITE>(7)).forward::<IS_WHITE>(1)) & empty;
+    let double_pushes =
+        ((single_pushes & Bitboard::relative_rank::<IS_WHITE>(3)).forward::<IS_WHITE>(1)) & empty;
 
     list.reserve(single_pushes.len() + double_pushes.len());
-    list.extend(single_pushes.map(|to| Move::new(Square::new(to.0 - 8), to)));
-    list.extend(double_pushes.map(|to| Move::new(Square::new(to.0 - 16), to)));
+    list.extend(single_pushes.map(|to| Move::new(Square::backward::<IS_WHITE>(to, 1), to)));
+    list.extend(double_pushes.map(|to| Move::new(Square::backward::<IS_WHITE>(to, 2), to)));
 }

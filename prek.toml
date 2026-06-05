@@ -18,9 +18,9 @@ files = "\\.(ts|tsx)$"
 stages = ["pre-commit"]
 
 [[repos.hooks]]
-id = "lint:rust"
-name = "lint:rust"
-entry = "pnpm run lint:rust"
+id = "lint:rs"
+name = "lint:rs"
+entry = "pnpm run lint:rs"
 language = "system"
 files = "^game-server/.*\\.rs$"
 pass_filenames = false
@@ -29,7 +29,7 @@ stages = ["pre-commit"]
 [[repos.hooks]]
 id = "test"
 name = "test"
-entry = "pnpm run test:changed"
+entry = "pnpm run test"
 language = "system"
 files = "\\.(rs|ts|tsx)$"
 pass_filenames = false

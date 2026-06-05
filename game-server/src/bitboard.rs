@@ -1,7 +1,7 @@
 use crate::square::Square;
 use std::{
     fmt,
-    ops::{BitAnd, BitOr, BitOrAssign, Not, Shl},
+    ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,16 +19,37 @@ macro_rules! bitboard {
 }
 
 impl Bitboard {
-    const EMPTY: Self = Self(0);
-    pub(super) const RANK_3: Self = Self(0xff << 16);
-    pub(super) const RANK_7: Self = Self(0xff << 48);
-
-    pub(super) fn contains(self, square: Square) -> bool {
-        self & Self::from(square) != Bitboard::EMPTY
-    }
+    pub(super) const EMPTY: Self = Self(0);
 
     pub(super) fn empty(self) -> bool {
         self == Self::EMPTY
+    }
+
+    pub(super) fn forward<const IS_WHITE: bool>(self, n: u32) -> Self {
+        if IS_WHITE {
+            self << (n * 8)
+        } else {
+            self >> (n * 8)
+        }
+    }
+
+    pub(super) const fn relative_rank<const IS_WHITE: bool>(n: u32) -> Self {
+        debug_assert!(n >= 1 && n <= 8);
+        let rank = if IS_WHITE { n } else { 9 - n };
+        Self(0xff << ((rank - 1) * 8))
+    }
+
+    pub(super) fn contains(self, square: Square) -> bool {
+        self & square != Bitboard::EMPTY
+    }
+
+    pub(super) fn apply_move(&mut self, from: Square, to: Square) {
+        let from_mask = Self::from(from).0;
+        let to_mask = Self::from(to).0;
+        let add_mask = ((self.0 & from_mask) >> from.0).wrapping_neg() & to_mask;
+
+        self.0 &= !(from_mask | to_mask);
+        self.0 |= add_mask;
     }
 }
 
@@ -55,7 +76,7 @@ impl fmt::Debug for Bitboard {
         for rank in (0..8).rev() {
             for file in 0..8 {
                 let sq = Square::new(rank * 8 + file);
-                let bit = if self.contains(sq) { '1' } else { '0' };
+                let bit = b'0' + self.contains(sq) as u8;
 
                 write!(f, "{bit}")?;
 
@@ -96,6 +117,20 @@ impl Shl<u32> for Bitboard {
     type Output = Self;
     fn shl(self, rhs: u32) -> Self::Output {
         Self(self.0 << rhs)
+    }
+}
+
+impl Shr<u32> for Bitboard {
+    type Output = Self;
+    fn shr(self, rhs: u32) -> Self::Output {
+        Self(self.0 >> rhs)
+    }
+}
+
+impl BitAnd<Square> for Bitboard {
+    type Output = Bitboard;
+    fn bitand(self, rhs: Square) -> Self::Output {
+        Self(self.0 & Self::from(rhs).0)
     }
 }
 

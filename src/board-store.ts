@@ -1,13 +1,21 @@
 import { createContext, use, useSyncExternalStore } from "react"
 
-export const PIECES = ["r", "n", "b", "q", "k", "p", "R", "N", "B", "Q", "K", "P"] as const
+import type { Move } from "./use-live-room"
+
+const PIECES = ["r", "n", "b", "q", "k", "p", "R", "N", "B", "Q", "K", "P"] as const
 export type Piece = (typeof PIECES)[number]
 
 export type BoardStore = ReturnType<typeof createBoardStore>
 type BoardState = ReturnType<BoardStore["getState"]>
 type Snapshot = Parameters<typeof createBoardState>[0]
 
-export function createBoardStore(snapshot: Snapshot) {
+export function createBoardStore({
+	snapshot,
+	onMove,
+}: {
+	snapshot: Snapshot
+	onMove?: (move: Move) => void
+}) {
 	let state = createBoardState(snapshot)
 	const listeners = new Set<() => void>()
 	const notify = () => {
@@ -22,23 +30,27 @@ export function createBoardStore(snapshot: Snapshot) {
 			state = createBoardState(snapshot)
 			notify()
 		},
+		setLegalMoves: (legalMoves: readonly Move[]) => {
+			state = { ...state, legalMoves }
+			notify()
+		},
 		setDraggedPieceSquare: (draggedPieceSquare: number | null) => {
 			if (state.draggedPieceSquare === draggedPieceSquare) return
 
 			state = { ...state, draggedPieceSquare }
 			notify()
 		},
-		movePiece: (sourceSquare: number, targetSquare: number) => {
-			const movingPiece = state.board[sourceSquare]
-			if (!movingPiece || sourceSquare === targetSquare) return
-			if (!state.legalMoves.some(({ from, to }) => from === sourceSquare && to === targetSquare))
-				return
+		movePiece: (move: Move) => {
+			const movingPiece = state.board[move.from]
+			if (!movingPiece || move.from === move.to) return
+			if (!state.legalMoves.some(({ from, to }) => from === move.from && to === move.to)) return
 
 			const board = [...state.board]
-			board[sourceSquare] = undefined
-			board[targetSquare] = movingPiece
+			board[move.from] = undefined
+			board[move.to] = movingPiece
 
-			state = { board, legalMoves: [], draggedPieceSquare: null }
+			state = { ...state, board, legalMoves: [] as const, draggedPieceSquare: null }
+			onMove?.(move)
 			notify()
 		},
 		subscribe: (listener: () => void) => {
@@ -50,18 +62,12 @@ export function createBoardStore(snapshot: Snapshot) {
 
 export const BoardStoreContext = createContext<BoardStore | null>(null)
 
-function createBoardState({ fen, moves }: { fen: string; moves: readonly string[] }) {
+function createBoardState({ fen, legalMoves }: { fen: string; legalMoves: readonly Move[] }) {
 	return {
 		board: createBoardFromFen(fen),
 		draggedPieceSquare: null as number | null,
-		legalMoves: moves.map((move) => {
-			const fromFile = move[0]!.charCodeAt(0) - "a".charCodeAt(0)
-			const fromRank = 8 - Number(move[1])
-			const toFile = move[2]!.charCodeAt(0) - "a".charCodeAt(0)
-			const toRank = 8 - Number(move[3])
-			return { from: fromRank * 8 + fromFile, to: toRank * 8 + toFile }
-		}),
-	}
+		legalMoves,
+	} as const
 }
 
 function createBoardFromFen(fen: string) {
@@ -108,7 +114,7 @@ function isPiece(piece: string): piece is Piece {
 
 if (import.meta.vitest) {
 	const { it, expect } = import.meta.vitest
-	it("returns valid board state for initial fen", () => {
+	it.concurrent("returns valid board state for initial fen", () => {
 		expect(createBoardFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")).toEqual([
 			..."rnbqkbnrpppppppp".split(""),
 			...Array.from({ length: 32 }, () => undefined),
@@ -116,14 +122,16 @@ if (import.meta.vitest) {
 		])
 	})
 
-	it("ignores illegal moves and applies legal moves", () => {
-		const store = createBoardStore({ fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", moves: ["e2e3"] })
+	it.concurrent("ignores illegal moves and applies legal moves", () => {
+		const store = createBoardStore({
+			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", legalMoves: [{ from: 52, to: 44 }] },
+		})
 
-		store.movePiece(52, 36)
+		store.movePiece({ from: 52, to: 36 })
 		expect(store.getState().board[52]).toBe("P")
 		expect(store.getState().board[36]).toBeUndefined()
 
-		store.movePiece(52, 44)
+		store.movePiece({ from: 52, to: 44 })
 		expect(store.getState().board[52]).toBeUndefined()
 		expect(store.getState().board[44]).toBe("P")
 		expect(store.getState().legalMoves).toEqual([])

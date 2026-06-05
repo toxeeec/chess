@@ -17,7 +17,7 @@ export default defineConfig({
 				compatibilityDate: "2025-09-02",
 				compatibilityFlags: ["nodejs_compat"],
 				d1Databases: { DB: "chess-test" },
-				durableObjects: { GAME_SERVER: "GameServer" },
+				durableObjects: { GAME_SERVER: { className: "GameServer", useSQLite: true } },
 				modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm?module"] }],
 			},
 		}),
