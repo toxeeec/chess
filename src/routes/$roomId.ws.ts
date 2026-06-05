@@ -1,18 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { z } from "zod"
 
-import { roomIdSchema, roomSessionMiddleware } from "#/room"
+import { roomSessionMiddleware } from "#/room"
 import { connectToRoomWebSocket } from "#/room.server"
 
-const paramsSchema = z.object({ roomId: roomIdSchema })
+import { parseRoomParams } from "./-room"
 
 export const Route = createFileRoute("/$roomId/ws")({
 	params: {
-		parse: (params) => {
-			const { data, success } = paramsSchema.safeParse(params)
-			if (!success) return false
-			return data
-		},
+		parse: parseRoomParams,
 	},
 	server: {
 		middleware: [roomSessionMiddleware],

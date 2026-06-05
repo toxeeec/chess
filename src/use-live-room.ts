@@ -47,9 +47,12 @@ export const snapshotMessageSchema = z.object({
 	legalMoves: movesSchema,
 })
 
+const playerSchema = z.enum(["white", "black"])
+
 const moveMessageSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	move: moveCodec,
+	turn: playerSchema,
 	legalMoves: movesSchema,
 })
 

@@ -11,7 +11,12 @@ import {
 	type RoomId,
 	type RoomSession,
 } from "./room"
-import { connectToRoomWebSocket, generateRoomId, redirectToRoom } from "./room.server"
+import {
+	connectToRoomWebSocket,
+	generateRoomId,
+	joinRoomFromInvite,
+	redirectToRoom,
+} from "./room.server"
 import { gamesTable } from "./schema.server"
 import { redirect, runInStartContext } from "./test-utils"
 
@@ -36,6 +41,19 @@ function roomSessionRequest(roomSession: RoomSession) {
 	} as const satisfies RequestInit
 }
 
+function expectRoomSessionCookie(response: Response) {
+	const cookie = response.headers.get("Set-Cookie")
+
+	expect(cookie).toContain(`${ROOM_SESSION_COOKIE_NAME}=`)
+	expect(cookie).toContain("Max-Age=1800")
+	expect(cookie).toContain("Secure")
+	expect(cookie).toContain("SameSite=Lax")
+
+	return roomSessionCodec.decode(
+		decodeURIComponent(cookie!.split(`${ROOM_SESSION_COOKIE_NAME}=`)[1]!.split(";")[0]!),
+	)
+}
+
 describe("redirectToRoom", () => {
 	it.concurrent("redirects to the room from an existing session", async () => {
 		const roomSession = { roomId: generateRoomId(), token: "white-token" }
@@ -57,11 +75,7 @@ describe("redirectToRoom", () => {
 	it.concurrent("creates a game and session cookie before redirecting to a new room", async () => {
 		const { result, response } = await runInStartContext(redirectToRoom)
 
-		const cookie = response.headers.get("Set-Cookie")
-		expect(cookie).toContain(`${ROOM_SESSION_COOKIE_NAME}=`)
-		const roomSession = roomSessionCodec.decode(
-			decodeURIComponent(cookie!.split(`${ROOM_SESSION_COOKIE_NAME}=`)[1]!.split(";")[0]!),
-		)
+		const roomSession = expectRoomSessionCookie(response)
 
 		const games = await db
 			.select()
@@ -71,11 +85,86 @@ describe("redirectToRoom", () => {
 
 		const game = games[0]!
 		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: game.roomId } }))
-		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=1800")
-		expect(response.headers.get("Set-Cookie")).toContain("Max-Age=1800")
-		expect(response.headers.get("Set-Cookie")).toContain("Secure")
-		expect(response.headers.get("Set-Cookie")).toContain("SameSite=Lax")
 		expect(roomSession).toEqual({ roomId: game.roomId, token: game.white })
+	})
+})
+
+describe("joinRoomFromInvite", () => {
+	it.concurrent("redirects to the current room from an existing session", async () => {
+		const currentRoomSession = { roomId: generateRoomId(), token: "current-white-token" }
+		const invitedRoomId = generateRoomId()
+		await db.insert(gamesTable).values([
+			{ roomId: currentRoomSession.roomId, white: currentRoomSession.token },
+			{ roomId: invitedRoomId, white: "invited-white-token" },
+		])
+
+		const { result, response } = await runInStartContext(
+			() => joinRoomFromInvite({ data: { roomId: invitedRoomId } }),
+			roomSessionRequest(currentRoomSession),
+		)
+		const [invitedGame] = await db
+			.select()
+			.from(gamesTable)
+			.where(eq(gamesTable.roomId, invitedRoomId))
+
+		expect(result).toEqual(
+			redirect({ to: "/$roomId", params: { roomId: currentRoomSession.roomId } }),
+		)
+		expect(response.headers.has("Set-Cookie")).toBe(false)
+		expect(invitedGame).toMatchObject({ white: "invited-white-token", black: null })
+	})
+
+	it.concurrent("redirects home when the game does not exist", async () => {
+		const { result, response } = await runInStartContext(() =>
+			joinRoomFromInvite({ data: { roomId: generateRoomId() } }),
+		)
+
+		expect(result).toEqual(redirect({ to: "/" }))
+		expect(response.headers.has("Set-Cookie")).toBe(false)
+	})
+
+	it.concurrent("redirects home when the game has no empty player slots", async () => {
+		const roomId = generateRoomId()
+		await db.insert(gamesTable).values({ roomId, white: "white-token", black: "black-token" })
+
+		const { result, response } = await runInStartContext(() =>
+			joinRoomFromInvite({ data: { roomId } }),
+		)
+
+		expect(result).toEqual(redirect({ to: "/" }))
+		expect(response.headers.has("Set-Cookie")).toBe(false)
+	})
+
+	it.concurrent("joins as black when black is empty", async () => {
+		const roomId = generateRoomId()
+		await db.insert(gamesTable).values({ roomId, white: "white-token" })
+
+		const { result, response } = await runInStartContext(() =>
+			joinRoomFromInvite({ data: { roomId } }),
+		)
+
+		const roomSession = expectRoomSessionCookie(response)
+		const [game] = await db.select().from(gamesTable).where(eq(gamesTable.roomId, roomId))
+
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId } }))
+		expect(roomSession).toEqual({ roomId, token: game!.black })
+		expect(game).toMatchObject({ white: "white-token", black: game!.black })
+	})
+
+	it.concurrent("joins as white when white is empty", async () => {
+		const roomId = generateRoomId()
+		await db.insert(gamesTable).values({ roomId, black: "black-token" })
+
+		const { result, response } = await runInStartContext(() =>
+			joinRoomFromInvite({ data: { roomId } }),
+		)
+
+		const roomSession = expectRoomSessionCookie(response)
+		const [game] = await db.select().from(gamesTable).where(eq(gamesTable.roomId, roomId))
+
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId } }))
+		expect(roomSession).toEqual({ roomId, token: game!.white })
+		expect(game).toMatchObject({ white: game!.white, black: "black-token" })
 	})
 })
 

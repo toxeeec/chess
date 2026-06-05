@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers"
 import { afterAll, describe, expect, it } from "vitest"
 
-import type { RoomId } from "./room"
+import type { Player, RoomId } from "./room"
 import { generateRoomId } from "./room.server"
 
 const TEST_ROOM_IDS = new Set<RoomId>()
@@ -34,7 +34,7 @@ function waitForWebSocketMessage(webSocket: WebSocket) {
 	})
 }
 
-async function acceptWebSocketWithInitialMessage(roomId: RoomId, player: "white" | "black") {
+async function acceptWebSocketWithInitialMessage(roomId: RoomId, player: Player) {
 	const response = await env.GAME_SERVER.getByName(roomId).fetch(
 		new Request("https://chess.localhost", {
 			headers: {
@@ -104,6 +104,7 @@ describe("GameServer", () => {
 			data: {
 				revision: 1,
 				move: "e2e3",
+				turn: "black",
 				legalMoves: expect.any(String),
 			},
 		}
@@ -138,11 +139,7 @@ describe("GameServer", () => {
 	it.concurrent("sends websocket protocol errors", async () => {
 		const roomId = generateTestRoomId()
 
-		const expectError = async (
-			message: string,
-			error: "invalid-message" | "invalid-move-format" | "illegal-move" | "not-your-turn",
-			player: "white" | "black" = "white",
-		) => {
+		const expectError = async (message: string, error: string, player: Player) => {
 			using webSocket = (await acceptWebSocketWithInitialMessage(roomId, player)).webSocket
 
 			webSocket.send(message)
@@ -153,9 +150,9 @@ describe("GameServer", () => {
 		}
 
 		await Promise.all([
-			expectError("not json", "invalid-message"),
-			expectError(JSON.stringify({ type: "move", data: "e2e" }), "invalid-move-format"),
-			expectError(JSON.stringify({ type: "move", data: "e2e5" }), "illegal-move"),
+			expectError("not json", "invalid-message", "white"),
+			expectError(JSON.stringify({ type: "move", data: "e2e" }), "invalid-move-format", "white"),
+			expectError(JSON.stringify({ type: "move", data: "e2e5" }), "illegal-move", "white"),
 			expectError(JSON.stringify({ type: "move", data: "a7a6" }), "not-your-turn", "black"),
 		])
 	})

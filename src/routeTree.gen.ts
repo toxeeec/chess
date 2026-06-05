@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoomIdRouteImport } from './routes/$roomId'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomIdWsRouteImport } from './routes/$roomId.ws'
+import { Route as RoomIdInviteRouteImport } from './routes/$roomId.invite'
 
 const RoomIdRoute = RoomIdRouteImport.update({
   id: '/$roomId',
@@ -28,29 +29,37 @@ const RoomIdWsRoute = RoomIdWsRouteImport.update({
   path: '/ws',
   getParentRoute: () => RoomIdRoute,
 } as any)
+const RoomIdInviteRoute = RoomIdInviteRouteImport.update({
+  id: '/invite',
+  path: '/invite',
+  getParentRoute: () => RoomIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/invite': typeof RoomIdInviteRoute
   '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/invite': typeof RoomIdInviteRoute
   '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$roomId': typeof RoomIdRouteWithChildren
+  '/$roomId/invite': typeof RoomIdInviteRoute
   '/$roomId/ws': typeof RoomIdWsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$roomId' | '/$roomId/ws'
+  fullPaths: '/' | '/$roomId' | '/$roomId/invite' | '/$roomId/ws'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$roomId' | '/$roomId/ws'
-  id: '__root__' | '/' | '/$roomId' | '/$roomId/ws'
+  to: '/' | '/$roomId' | '/$roomId/invite' | '/$roomId/ws'
+  id: '__root__' | '/' | '/$roomId' | '/$roomId/invite' | '/$roomId/ws'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -81,14 +90,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomIdWsRouteImport
       parentRoute: typeof RoomIdRoute
     }
+    '/$roomId/invite': {
+      id: '/$roomId/invite'
+      path: '/invite'
+      fullPath: '/$roomId/invite'
+      preLoaderRoute: typeof RoomIdInviteRouteImport
+      parentRoute: typeof RoomIdRoute
+    }
   }
 }
 
 interface RoomIdRouteChildren {
+  RoomIdInviteRoute: typeof RoomIdInviteRoute
   RoomIdWsRoute: typeof RoomIdWsRoute
 }
 
 const RoomIdRouteChildren: RoomIdRouteChildren = {
+  RoomIdInviteRoute: RoomIdInviteRoute,
   RoomIdWsRoute: RoomIdWsRoute,
 }
 

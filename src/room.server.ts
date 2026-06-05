@@ -2,7 +2,8 @@ import { redirect } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 import { setCookie } from "@tanstack/react-start/server"
 import { env } from "cloudflare:workers"
-import { and, eq, or } from "drizzle-orm"
+import { and, eq, isNull, or, sql } from "drizzle-orm"
+import { z } from "zod"
 
 import { db } from "./db.server"
 import { nanoid } from "./nanoid.server"
@@ -13,6 +14,7 @@ import {
 	roomIdSchema,
 	roomSessionCodec,
 	type RoomSession,
+	type Player,
 } from "./room"
 import { gamesTable } from "./schema.server"
 
@@ -23,13 +25,44 @@ export const redirectToRoom = createServerFn().handler(async () => {
 	if (roomSession) throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
 
 	roomSession = await createRoomSession()
+	setRoomSessionCookie(roomSession)
+	throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+})
+
+export const joinRoomFromInvite = createServerFn()
+	.inputValidator(z.object({ roomId: roomIdSchema }))
+	.handler(async ({ data: { roomId } }) => {
+		const currentRoomSession = getRoomSessionFromCookie()
+		if (currentRoomSession) {
+			throw redirect({ to: "/$roomId", params: { roomId: currentRoomSession.roomId } })
+		}
+
+		const roomSession = { roomId, token: generateToken() }
+
+		const [game] = await db
+			.update(gamesTable)
+			.set({
+				white: sql`coalesce(${gamesTable.white}, ${roomSession.token})`,
+				black: sql`case when ${gamesTable.white} is not null then ${roomSession.token} else ${gamesTable.black} end`,
+			})
+			.where(
+				and(eq(gamesTable.roomId, roomId), or(isNull(gamesTable.white), isNull(gamesTable.black))),
+			)
+			.returning()
+
+		if (!game) throw redirect({ to: "/" })
+
+		setRoomSessionCookie(roomSession)
+		throw redirect({ to: "/$roomId", params: { roomId } })
+	})
+
+function setRoomSessionCookie(roomSession: RoomSession) {
 	setCookie(ROOM_SESSION_COOKIE_NAME, roomSessionCodec.encode(roomSession), {
 		maxAge: 30 * 60, // 30 minutes
 		secure: true,
 		sameSite: "lax",
 	})
-	throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
-})
+}
 
 async function createRoomSession() {
 	const roomSession = { roomId: generateRoomId(), token: generateToken() }
@@ -56,7 +89,7 @@ export async function getGameByRoomSession(roomSession: RoomSession) {
 export function connectToRoomWebSocket(
 	request: Request,
 	roomSession: RoomSession,
-	player: "white" | "black",
+	player: Player,
 	roomId: RoomId,
 ) {
 	if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {

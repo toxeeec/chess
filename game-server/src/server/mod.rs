@@ -110,7 +110,7 @@ impl DurableObject for GameServer {
                 }
             }
 
-            MoveMessage::new(mve, state.revision, state.legal_moves())
+            MoveMessage::new(mve, state.revision, state.game.turn, state.legal_moves())
         };
 
         let message = ServerMessage::Move(move_message);

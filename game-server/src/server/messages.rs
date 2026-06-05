@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::moves::Move;
+use crate::{game::Player, moves::Move};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +19,7 @@ pub(super) struct MoveMessage {
     revision: u32,
     #[serde(rename = "move")]
     mve: String,
+    turn: Player,
     legal_moves: String,
 }
 
@@ -47,10 +48,11 @@ pub(super) enum ClientMessage {
 }
 
 impl MoveMessage {
-    pub(super) fn new(mve: Move, revision: u32, legal_moves: String) -> Self {
+    pub(super) fn new(mve: Move, revision: u32, turn: Player, legal_moves: String) -> Self {
         Self {
             revision,
             mve: mve.to_string(),
+            turn,
             legal_moves,
         }
     }

@@ -15,6 +15,8 @@ export type RoomId = z.infer<typeof roomIdSchema>
 export const roomSessionCodec = jsonCodec(z.object({ token: z.string(), roomId: roomIdSchema }))
 export type RoomSession = z.infer<typeof roomSessionCodec>
 
+export type Player = "white" | "black"
+
 export const getRoomSessionFromCookie = createIsomorphicFn()
 	.server(() => {
 		const cookie = getCookie(ROOM_SESSION_COOKIE_NAME)
@@ -59,9 +61,9 @@ export const roomSessionMiddleware = createMiddleware().server(async ({ next }) 
 
 export const getGameState = createServerFn()
 	.middleware([roomSessionMiddleware])
-	.handler(async ({ context }) => {
+	.handler(async ({ context: { roomSession, player } }) => {
 		const { revision, fen, legalMoves } = await env.GAME_SERVER.getByName(
-			context.roomSession.roomId,
+			roomSession.roomId,
 		).snapshot()
-		return { revision, fen, legalMoves }
+		return { revision, fen, legalMoves, player }
 	})
