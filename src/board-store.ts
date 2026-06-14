@@ -33,6 +33,13 @@ export function createBoardStore({
 			state = createBoardState(snapshot, player)
 			notify()
 		},
+		setLegalMoves: (legalMoves: readonly Move[]) => {
+			state = {
+				...state,
+				legalMoves: state.turn === state.player ? legalMoves : [],
+			}
+			notify()
+		},
 		setDraggedPieceSquare: (draggedPieceSquare: number | null) => {
 			if (state.draggedPieceSquare === draggedPieceSquare) return
 
@@ -218,6 +225,24 @@ if (import.meta.vitest) {
 
 		store.movePiece({ from: 52, to: 44 })
 		expect(onMove).toHaveBeenCalledExactlyOnceWith({ from: 52, to: 44 })
+	})
+
+	it.concurrent("does not move pieces without a matching legal move", () => {
+		const onMove = vi.fn()
+		const store = createBoardStore({
+			player: "white",
+			onMove,
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				legalMoves: [],
+			},
+		})
+
+		store.movePiece({ from: 52, to: 44 })
+
+		expect(store.getState().board[52]).toBe("P")
+		expect(store.getState().board[44]).toBeUndefined()
+		expect(onMove).not.toHaveBeenCalled()
 	})
 
 	it.concurrent("filters legal moves to the current player", () => {

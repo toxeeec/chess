@@ -1,6 +1,8 @@
-use crate::{bitboard, bitboard::Bitboard, moves::Move, square::Square};
-use anyhow::{Result, bail};
 use std::fmt;
+
+use anyhow::{Result, bail};
+
+use crate::{bitboard, bitboard::Bitboard, moves::Move, square::Square};
 
 pub(super) struct Board {
     white_pawns: Bitboard,

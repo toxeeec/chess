@@ -19,6 +19,11 @@ import {
 import { gamesTable } from "./schema.server"
 
 const PLAYER_HEADER = "Player-Color"
+const GAME_CONFIG = {
+	joinTimeoutMs: 2 * 60_000,
+	firstMoveTimeoutMs: 30_000,
+	disconnectTimeoutMs: 60_000,
+} as const
 
 export const redirectToRoom = createServerFn().handler(async () => {
 	let roomSession = getRoomSessionFromCookie()
@@ -30,7 +35,7 @@ export const redirectToRoom = createServerFn().handler(async () => {
 })
 
 export const joinRoomFromInvite = createServerFn()
-	.inputValidator(z.object({ roomId: roomIdSchema }))
+	.validator(z.object({ roomId: roomIdSchema }))
 	.handler(async ({ data: { roomId } }) => {
 		const currentRoomSession = getRoomSessionFromCookie()
 		if (currentRoomSession) {
@@ -67,6 +72,7 @@ function setRoomSessionCookie(roomSession: RoomSession) {
 async function createRoomSession() {
 	const roomSession = { roomId: generateRoomId(), token: generateToken() }
 	await db.insert(gamesTable).values({ roomId: roomSession.roomId, white: roomSession.token })
+	await env.GAME_SERVER.getByName(roomSession.roomId).init(GAME_CONFIG)
 
 	return roomSession
 }

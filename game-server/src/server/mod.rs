@@ -1,57 +1,75 @@
 mod messages;
-mod state;
-
-use std::{cell::RefCell, str::FromStr};
 
 pub use messages::SnapshotMessage;
-use messages::{ClientMessage, ErrorMessage, MoveMessage, ServerMessage};
-use state::GameServerState;
+
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    str::FromStr,
+};
+
 use wasm_bindgen::prelude::wasm_bindgen;
 use worker::{
-    DurableObject, Env, Request, Response, Result, State, WebSocket, WebSocketIncomingMessage,
-    WebSocketPair, durable_object,
+    DurableObject, Env, Request, Response, Result, ScheduledTime, State, WebSocket,
+    WebSocketIncomingMessage, WebSocketPair, durable_object,
+    js_sys::{Date, Number},
 };
 
 use crate::{
     game::{Game, Player},
+    game_state::{GameState, PlayerConnected, StateChange},
+    game_storage::GameStorage,
     moves::Move,
-    storage::{Storage, StoredGame},
+    server::messages::{ClientMessage, ErrorMessage, MoveMessage, ServerMessage},
 };
 
 const PLAYER_HEADER: &str = "Player-Color";
 
 #[durable_object]
 pub struct GameServer {
-    state: RefCell<GameServerState>,
-    storage: Storage,
+    state: RefCell<Option<GameState>>,
+    storage: GameStorage,
     durable_state: State,
 }
 
 #[wasm_bindgen]
 impl GameServer {
     #[wasm_bindgen]
+    pub async fn init(
+        &self,
+        join_timeout_ms: i32,
+        first_move_timeout_ms: i32,
+        disconnect_timeout_ms: i32,
+    ) -> Result<()> {
+        if self.state.borrow().is_some() {
+            return Ok(());
+        }
+
+        self.create_game(
+            join_timeout_ms,
+            first_move_timeout_ms,
+            disconnect_timeout_ms,
+        )?;
+        self.schedule_next_alarm().await?;
+
+        Ok(())
+    }
+
+    #[wasm_bindgen]
     pub fn snapshot(&self) -> SnapshotMessage {
-        self.state.borrow().snapshot_message()
+        SnapshotMessage::from(&*self.state().expect("game is not initialized"))
     }
 }
 
 impl DurableObject for GameServer {
     fn new(durable_state: State, _: Env) -> Self {
-        let storage = Storage::new(durable_state.storage());
+        let storage = GameStorage::new(durable_state.storage());
         storage.init().unwrap();
 
-        let stored_game = match storage.load().unwrap() {
-            Some(stored_game) => stored_game,
-            None => {
-                let game = Game::default();
-                storage.save(&game, 0).unwrap();
-                StoredGame { game, revision: 0 }
-            }
-        };
+        let state = storage.load().unwrap();
 
         Self {
-            state: RefCell::new(GameServerState::new(stored_game.game, stored_game.revision)),
-            storage: Storage::new(durable_state.storage()),
+            state: RefCell::new(state),
+            storage,
             durable_state,
         }
     }
@@ -63,15 +81,29 @@ impl DurableObject for GameServer {
             _ => return Response::error("Forbidden", 403),
         };
 
+        let snapshot = match self.state() {
+            Ok(state) => SnapshotMessage::from(&*state),
+            Err(err) => return Response::error(err.to_string(), 409),
+        };
+
         let pair = WebSocketPair::new()?;
         pair.server.serialize_attachment(player)?;
         self.durable_state.accept_web_socket(&pair.server);
+        pair.server.send(&ServerMessage::Snapshot(snapshot))?;
 
-        let state = self.state.borrow();
-        pair.server
-            .send(&ServerMessage::Snapshot(state.snapshot_message()))?;
-
+        self.handle_player_connected(player).await?;
         Response::from_websocket(pair.client)
+    }
+
+    async fn alarm(&self) -> Result<Response> {
+        {
+            let mut state = self.state_mut()?;
+            let change = state.process_due_event(Date::now() as i64);
+            self.handle_state_change(&state, change)?;
+        };
+
+        self.schedule_next_alarm().await?;
+        Response::ok("ok")
     }
 
     async fn websocket_message(
@@ -99,18 +131,21 @@ impl DurableObject for GameServer {
         };
 
         let move_message = {
-            let mut state = self.state.borrow_mut();
-            match state.make_move(player, mve) {
-                Ok(_) => {
-                    self.storage.save(&state.game, state.revision)?;
-                }
+            let mut state = match self.state_mut() {
+                Ok(state) => state,
                 Err(error) => {
-                    ws.send(&ServerMessage::Error(error))?;
-                    return Ok(());
+                    ws.close(Some(1011), Some("game is not initialized"))?;
+                    return Err(error);
                 }
+            };
+
+            if let Err(error) = state.make_move(player, mve) {
+                ws.send(&ServerMessage::Error(error.into()))?;
+                return Ok(());
             }
 
-            MoveMessage::new(mve, state.revision, state.game.turn, state.legal_moves())
+            self.storage.save(&state)?;
+            MoveMessage::new(mve, state.revision, &state.game)
         };
 
         let message = ServerMessage::Move(move_message);
@@ -118,6 +153,129 @@ impl DurableObject for GameServer {
             socket.send(&message)?;
         }
 
+        self.schedule_next_alarm().await?;
         Ok(())
+    }
+
+    async fn websocket_close(
+        &self,
+        ws: WebSocket,
+        _code: usize,
+        _reason: String,
+        _was_clean: bool,
+    ) -> Result<()> {
+        let Some(player) = ws.deserialize_attachment::<Player>()? else {
+            return Ok(());
+        };
+
+        self.handle_player_disconnected(player).await?;
+        Ok(())
+    }
+}
+
+impl GameServer {
+    fn create_game(
+        &self,
+        join_timeout_ms: i32,
+        first_move_timeout_ms: i32,
+        disconnect_timeout_ms: i32,
+    ) -> Result<()> {
+        let game_state = self.storage.create_game(
+            Game::default(),
+            join_timeout_ms,
+            first_move_timeout_ms,
+            disconnect_timeout_ms,
+        )?;
+        self.state.replace(Some(game_state));
+
+        Ok(())
+    }
+
+    async fn handle_player_connected(&self, player: Player) -> Result<()> {
+        let is_white_connected = self.is_player_connected(Player::White)?;
+        let is_black_connected = self.is_player_connected(Player::Black)?;
+
+        {
+            let mut state = self.state_mut()?;
+            let change = state.player_connected(PlayerConnected {
+                player,
+                now: Date::now() as i64,
+                is_white_connected,
+                is_black_connected,
+            });
+            self.handle_state_change(&state, change)?;
+        };
+
+        self.schedule_next_alarm().await?;
+        Ok(())
+    }
+
+    async fn handle_player_disconnected(&self, player: Player) -> Result<()> {
+        if self.is_player_connected(player)? {
+            return Ok(());
+        }
+
+        {
+            let mut state = self.state_mut()?;
+            let change = state.player_disconnected(player, Date::now() as i64);
+            self.handle_state_change(&state, change)?;
+        }
+
+        self.schedule_next_alarm().await?;
+        Ok(())
+    }
+
+    fn handle_state_change(&self, state: &GameState, change: StateChange) -> Result<()> {
+        match change {
+            StateChange::LifecycleChanged => {
+                self.storage.save(state)?;
+
+                let message = ServerMessage::Status(state.into());
+                for socket in self.durable_state.get_websockets() {
+                    socket.send(&message)?;
+                }
+            }
+            StateChange::Updated => self.storage.save(state)?,
+            StateChange::Unchanged => {}
+        }
+
+        Ok(())
+    }
+
+    async fn schedule_next_alarm(&self) -> Result<()> {
+        let next_alarm = self.state()?.next_event_at();
+
+        match next_alarm {
+            Some(next_alarm) => {
+                let timestamp = Number::from(next_alarm as f64);
+                self.durable_state
+                    .storage()
+                    .set_alarm(ScheduledTime::new(Date::new(&timestamp)))
+                    .await?;
+            }
+            None => self.durable_state.storage().delete_alarm().await?,
+        }
+
+        Ok(())
+    }
+
+    fn is_player_connected(&self, player: Player) -> Result<bool> {
+        for socket in self.durable_state.get_websockets() {
+            if socket.deserialize_attachment::<Player>()? == Some(player) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn state(&self) -> Result<Ref<'_, GameState>> {
+        Ref::filter_map(self.state.borrow(), Option::as_ref)
+            .map_err(|_| worker::Error::RustError("game is not initialized".to_string()))
+    }
+
+    fn state_mut(&self) -> Result<RefMut<'_, GameState>> {
+        RefMut::filter_map(self.state.borrow_mut(), Option::as_mut)
+            .map_err(|_| worker::Error::RustError("game is not initialized".to_string()))
     }
 }

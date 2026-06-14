@@ -1,8 +1,9 @@
-use crate::square::Square;
 use std::{
     fmt,
     ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr},
 };
+
+use crate::square::Square;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Bitboard(u64);

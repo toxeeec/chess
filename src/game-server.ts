@@ -10,17 +10,21 @@ export class GameServer extends DurableObject {
 		this.#wasmGameServer = new WasmGameServer(ctx, env)
 	}
 
-	snapshot() {
-		const { revision, fen, legalMoves } = this.#wasmGameServer.snapshot()
-		return { revision, fen, legalMoves }
+	init({
+		joinTimeoutMs,
+		firstMoveTimeoutMs,
+		disconnectTimeoutMs,
+	}: {
+		joinTimeoutMs: number
+		firstMoveTimeoutMs: number
+		disconnectTimeoutMs: number
+	}) {
+		return this.#wasmGameServer.init(joinTimeoutMs, firstMoveTimeoutMs, disconnectTimeoutMs)
 	}
 
-	async clear() {
-		if (import.meta.env.MODE !== "test") {
-			throw new Error("GameServer.clear can only be called in tests")
-		}
-
-		await Promise.all([this.ctx.storage.deleteAlarm(), this.ctx.storage.deleteAll()])
+	snapshot() {
+		const { revision, fen, status, legalMoves } = this.#wasmGameServer.snapshot()
+		return { revision, fen, status, legalMoves }
 	}
 
 	fetch(request: Request) {
@@ -31,5 +35,11 @@ export class GameServer extends DurableObject {
 		return this.#wasmGameServer.webSocketMessage(ws, message)
 	}
 
-	webSocketClose() {}
+	webSocketClose(ws: WebSocket, code: number, reason: string, was_clean: boolean) {
+		return this.#wasmGameServer.webSocketClose(ws, code, reason, was_clean)
+	}
+
+	alarm() {
+		return this.#wasmGameServer.alarm()
+	}
 }

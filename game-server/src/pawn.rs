@@ -1,6 +1,11 @@
-use crate::{bitboard::Bitboard, board::Board, moves::Move, square::Square};
+use crate::{
+    bitboard::Bitboard,
+    board::Board,
+    moves::{Move, MoveList},
+    square::Square,
+};
 
-pub(super) fn add_pawn_moves<const IS_WHITE: bool>(board: &Board, list: &mut Vec<Move>) {
+pub(super) fn add_pawn_moves<const IS_WHITE: bool>(board: &Board, list: &mut MoveList) {
     let empty = board.empty();
     let pawns = board.pawns::<IS_WHITE>();
 

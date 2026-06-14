@@ -44,6 +44,12 @@ const movesSchema = z
 export const snapshotMessageSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	fen: z.string(),
+	status: z.enum(["waiting", "active", "ended", "expired"]),
+	legalMoves: movesSchema,
+})
+
+const statusMessageSchema = z.object({
+	status: snapshotMessageSchema.shape.status,
 	legalMoves: movesSchema,
 })
 
@@ -59,12 +65,14 @@ const moveMessageSchema = z.object({
 const liveRoomMessageCodec = jsonCodec(
 	z.discriminatedUnion("type", [
 		z.object({ type: z.literal("snapshot"), data: snapshotMessageSchema }),
+		z.object({ type: z.literal("status"), data: statusMessageSchema }),
 		z.object({ type: z.literal("move"), data: moveMessageSchema }),
 		z.object({ type: z.literal("error"), data: z.string() }),
 	]),
 )
 
 type SnapshotMessage = z.infer<typeof snapshotMessageSchema>
+type StatusMessage = z.infer<typeof statusMessageSchema>
 type MoveMessage = z.infer<typeof moveMessageSchema>
 
 type ClientMessage = { type: "move"; data: string }
@@ -72,10 +80,12 @@ type ClientMessage = { type: "move"; data: string }
 export function useLiveRoom({
 	roomId,
 	onSnapshot,
+	onStatus,
 	onMove,
 }: {
 	roomId: RoomId
 	onSnapshot: (state: SnapshotMessage) => void
+	onStatus: (status: StatusMessage) => void
 	onMove: (state: MoveMessage) => void
 }) {
 	const router = useRouter()
@@ -92,6 +102,10 @@ export function useLiveRoom({
 		switch (message.type) {
 			case "snapshot": {
 				onSnapshot(message.data)
+				return
+			}
+			case "status": {
+				onStatus(message.data)
 				return
 			}
 			case "move": {

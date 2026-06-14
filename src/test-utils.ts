@@ -6,6 +6,12 @@ import { expect } from "vitest"
 
 import { getRouter } from "./router"
 
+export const TEST_GAME_CONFIG = {
+	joinTimeoutMs: 1000,
+	firstMoveTimeoutMs: 500,
+	disconnectTimeoutMs: 300,
+} as const
+
 export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit?: RequestInit) {
 	const request = new Request("https://chess.localhost", requestInit)
 

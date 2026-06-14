@@ -1,6 +1,11 @@
-use crate::{board::Board, moves::Move, pawn::add_pawn_moves};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+
+use crate::{
+    board::Board,
+    moves::{Move, MoveList},
+    pawn::add_pawn_moves,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -41,7 +46,7 @@ pub(super) enum MakeMoveError {
 pub(super) struct Game {
     pub(super) board: Board,
     pub(super) turn: Player,
-    pub(super) moves: Vec<Move>,
+    pub(super) moves: MoveList,
 }
 
 impl Default for Game {
@@ -55,7 +60,7 @@ impl Game {
         let mut game = Self {
             board,
             turn,
-            moves: Vec::with_capacity(32),
+            moves: MoveList::default(),
         };
         game.add_moves();
 
@@ -81,7 +86,7 @@ impl Game {
             return Err(MakeMoveError::NotYourTurn);
         }
 
-        if !self.moves.contains(&mve) {
+        if !self.moves.contains(mve) {
             return Err(MakeMoveError::IllegalMove);
         }
 
@@ -108,9 +113,11 @@ impl Game {
 
 #[cfg(test)]
 mod tests {
-    use super::{Game, Player};
-    use crate::moves::Move;
     use std::str::FromStr;
+
+    use crate::moves::Move;
+
+    use super::{Game, Player};
 
     #[test]
     fn parses_white_and_black_active_color() {

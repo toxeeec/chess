@@ -1,9 +1,11 @@
-use crate::square::Square;
-use anyhow::{Result, bail};
 use std::{
     fmt::{self, Write},
     str::FromStr,
 };
+
+use anyhow::{Result, bail};
+
+use crate::square::Square;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Move {
@@ -11,9 +13,36 @@ pub(super) struct Move {
     pub(super) to: Square,
 }
 
+pub(crate) struct MoveList(Vec<Move>);
+
 impl Move {
     pub(super) const fn new(from: Square, to: Square) -> Self {
         Self { from, to }
+    }
+}
+
+impl MoveList {
+    pub(super) const EMPTY: &'static Self = &Self(Vec::new());
+
+    pub(crate) fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub(crate) fn contains(&self, mve: Move) -> bool {
+        self.0.contains(&mve)
+    }
+
+    pub(crate) fn extend<T: IntoIterator<Item = Move>>(&mut self, iter: T) {
+        self.0.extend(iter);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.0.reserve(additional);
     }
 }
 
@@ -24,6 +53,20 @@ impl fmt::Display for Move {
 
         f.write_char((b'a' + (self.to.0 % 8) as u8) as char)?;
         f.write_char((b'1' + (self.to.0 / 8) as u8) as char)
+    }
+}
+
+impl fmt::Display for MoveList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut moves = self.0.iter();
+        if let Some(first) = moves.next() {
+            write!(f, "{}", first)?;
+
+            for mve in moves {
+                write!(f, " {}", mve)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -43,6 +86,12 @@ impl FromStr for Move {
     }
 }
 
+impl Default for MoveList {
+    fn default() -> Self {
+        Self(Vec::with_capacity(32))
+    }
+}
+
 fn parse_square(file: u8, rank: u8) -> Result<Square> {
     if !(b'a'..=b'h').contains(&file) || !(b'1'..=b'8').contains(&rank) {
         bail!("invalid square");
@@ -53,9 +102,11 @@ fn parse_square(file: u8, rank: u8) -> Result<Square> {
 
 #[cfg(test)]
 mod tests {
-    use super::Move;
-    use crate::square::Square;
     use std::str::FromStr;
+
+    use crate::square::Square;
+
+    use super::Move;
 
     #[test]
     fn parses_valid_moves() {

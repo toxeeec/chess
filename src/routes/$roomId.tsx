@@ -40,6 +40,9 @@ function RouteComponent() {
 			store.setState(snapshot)
 			lastRevision.current = snapshot.revision
 		},
+		onStatus: ({ legalMoves }) => {
+			store.setLegalMoves(legalMoves)
+		},
 		onMove: ({ revision, move, legalMoves, turn }) => {
 			if (revision <= lastRevision.current) return
 			if (revision !== lastRevision.current + 1) {

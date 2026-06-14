@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers"
 import { eq } from "drizzle-orm"
-import { afterAll, beforeAll, describe, expect, inject, it } from "vitest"
+import { beforeAll, describe, expect, inject, it } from "vitest"
 
 import { db } from "./db.server"
 import {
@@ -18,19 +18,10 @@ import {
 	redirectToRoom,
 } from "./room.server"
 import { gamesTable } from "./schema.server"
-import { redirect, runInStartContext } from "./test-utils"
+import { redirect, runInStartContext, TEST_GAME_CONFIG } from "./test-utils"
 
 beforeAll(async () => {
 	await env.DB.exec(inject("TEST_SCHEMA_SQL"))
-})
-
-const TEST_GAME_SERVER_ROOM_IDS = new Set<RoomId>()
-
-afterAll(async () => {
-	await Promise.all([
-		...Array.from(TEST_GAME_SERVER_ROOM_IDS, (roomId) => env.GAME_SERVER.getByName(roomId).clear()),
-		db.delete(gamesTable),
-	])
 })
 
 function roomSessionRequest(roomSession: RoomSession) {
@@ -302,6 +293,7 @@ describe("connectToRoomWebSocket", () => {
 
 	it.concurrent("forwards matching room websocket requests with the player header", async () => {
 		const roomId = generateRoomId()
+		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		const response = await connectToRoomWebSocketRequest(
 			roomId,
 			{ roomId, token: "white-token" },
@@ -315,6 +307,5 @@ describe("connectToRoomWebSocket", () => {
 
 		response.webSocket!.accept()
 		response.webSocket!.close()
-		TEST_GAME_SERVER_ROOM_IDS.add(roomId)
 	})
 })
