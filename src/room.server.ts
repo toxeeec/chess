@@ -27,7 +27,9 @@ const GAME_CONFIG = {
 
 export const redirectToRoom = createServerFn().handler(async () => {
 	let roomSession = getRoomSessionFromCookie()
-	if (roomSession) throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+	if (roomSession && (await isResumableRoomSession(roomSession))) {
+		throw redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } })
+	}
 
 	roomSession = await createRoomSession()
 	setRoomSessionCookie(roomSession)
@@ -38,7 +40,7 @@ export const joinRoomFromInvite = createServerFn()
 	.validator(z.object({ roomId: roomIdSchema }))
 	.handler(async ({ data: { roomId } }) => {
 		const currentRoomSession = getRoomSessionFromCookie()
-		if (currentRoomSession) {
+		if (currentRoomSession && (await isResumableRoomSession(currentRoomSession))) {
 			throw redirect({ to: "/$roomId", params: { roomId: currentRoomSession.roomId } })
 		}
 
@@ -75,6 +77,14 @@ async function createRoomSession() {
 	await env.GAME_SERVER.getByName(roomSession.roomId).init(GAME_CONFIG)
 
 	return roomSession
+}
+
+async function isResumableRoomSession(roomSession: RoomSession) {
+	const game = await getGameByRoomSession(roomSession)
+	if (!game) return false
+
+	const { status } = await env.GAME_SERVER.getByName(roomSession.roomId).snapshot()
+	return status === "waiting" || status === "active"
 }
 
 export async function getGameByRoomSession(roomSession: RoomSession) {

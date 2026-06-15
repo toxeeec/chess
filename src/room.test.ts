@@ -1,3 +1,4 @@
+import { runDurableObjectAlarm } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { eq } from "drizzle-orm"
 import { beforeAll, describe, expect, inject, it } from "vitest"
@@ -24,6 +25,14 @@ beforeAll(async () => {
 	await env.DB.exec(inject("TEST_SCHEMA_SQL"))
 })
 
+async function expireWaitingRoom(roomId: RoomId) {
+	const stub = env.GAME_SERVER.getByName(roomId)
+	await stub.init({ ...TEST_GAME_CONFIG, joinTimeoutMs: 1 })
+	await new Promise((resolve) => setTimeout(resolve, 10))
+	await runDurableObjectAlarm(stub)
+	expect(await stub.snapshot()).toMatchObject({ status: "expired" })
+}
+
 function roomSessionRequest(roomSession: RoomSession) {
 	return {
 		headers: {
@@ -46,8 +55,11 @@ function expectRoomSessionCookie(response: Response) {
 }
 
 describe("redirectToRoom", () => {
-	it.concurrent("redirects to the room from an existing session", async () => {
+	it.concurrent("redirects to the room from an existing waiting session", async () => {
 		const roomSession = { roomId: generateRoomId(), token: "white-token" }
+		await db.insert(gamesTable).values({ roomId: roomSession.roomId, white: roomSession.token })
+		await env.GAME_SERVER.getByName(roomSession.roomId).init(TEST_GAME_CONFIG)
+
 		const { result, response } = await runInStartContext(
 			redirectToRoom,
 			roomSessionRequest(roomSession),
@@ -60,7 +72,24 @@ describe("redirectToRoom", () => {
 			.select()
 			.from(gamesTable)
 			.where(eq(gamesTable.roomId, roomSession.roomId))
-		expect(games).toEqual([])
+		expect(games).toHaveLength(1)
+	})
+
+	it.concurrent("creates a new game when an existing session has expired", async () => {
+		const expiredRoomSession = { roomId: generateRoomId(), token: "white-token" }
+		await db
+			.insert(gamesTable)
+			.values({ roomId: expiredRoomSession.roomId, white: expiredRoomSession.token })
+		await expireWaitingRoom(expiredRoomSession.roomId)
+
+		const { result, response } = await runInStartContext(
+			redirectToRoom,
+			roomSessionRequest(expiredRoomSession),
+		)
+		const roomSession = expectRoomSessionCookie(response)
+
+		expect(roomSession.roomId).not.toBe(expiredRoomSession.roomId)
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: roomSession.roomId } }))
 	})
 
 	it.concurrent("creates a game and session cookie before redirecting to a new room", async () => {
@@ -88,6 +117,7 @@ describe("joinRoomFromInvite", () => {
 			{ roomId: currentRoomSession.roomId, white: currentRoomSession.token },
 			{ roomId: invitedRoomId, white: "invited-white-token" },
 		])
+		await env.GAME_SERVER.getByName(currentRoomSession.roomId).init(TEST_GAME_CONFIG)
 
 		const { result, response } = await runInStartContext(
 			() => joinRoomFromInvite({ data: { roomId: invitedRoomId } }),
@@ -103,6 +133,30 @@ describe("joinRoomFromInvite", () => {
 		)
 		expect(response.headers.has("Set-Cookie")).toBe(false)
 		expect(invitedGame).toMatchObject({ white: "invited-white-token", black: null })
+	})
+
+	it.concurrent("joins the invited room when the current session has expired", async () => {
+		const currentRoomSession = { roomId: generateRoomId(), token: "current-white-token" }
+		const invitedRoomId = generateRoomId()
+		await db.insert(gamesTable).values([
+			{ roomId: currentRoomSession.roomId, white: currentRoomSession.token },
+			{ roomId: invitedRoomId, white: "invited-white-token" },
+		])
+		await expireWaitingRoom(currentRoomSession.roomId)
+
+		const { result, response } = await runInStartContext(
+			() => joinRoomFromInvite({ data: { roomId: invitedRoomId } }),
+			roomSessionRequest(currentRoomSession),
+		)
+		const roomSession = expectRoomSessionCookie(response)
+		const [invitedGame] = await db
+			.select()
+			.from(gamesTable)
+			.where(eq(gamesTable.roomId, invitedRoomId))
+
+		expect(result).toEqual(redirect({ to: "/$roomId", params: { roomId: invitedRoomId } }))
+		expect(roomSession).toEqual({ roomId: invitedRoomId, token: invitedGame!.black })
+		expect(invitedGame).toMatchObject({ white: "invited-white-token", black: roomSession.token })
 	})
 
 	it.concurrent("redirects home when the game does not exist", async () => {
