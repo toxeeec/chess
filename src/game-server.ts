@@ -14,17 +14,35 @@ export class GameServer extends DurableObject {
 		joinTimeoutMs,
 		firstMoveTimeoutMs,
 		disconnectTimeoutMs,
+		timeControlMs,
 	}: {
 		joinTimeoutMs: number
 		firstMoveTimeoutMs: number
 		disconnectTimeoutMs: number
+		timeControlMs: number
 	}) {
-		return this.#wasmGameServer.init(joinTimeoutMs, firstMoveTimeoutMs, disconnectTimeoutMs)
+		return this.#wasmGameServer.init(
+			joinTimeoutMs,
+			firstMoveTimeoutMs,
+			disconnectTimeoutMs,
+			timeControlMs,
+		)
 	}
 
 	snapshot() {
-		const { revision, fen, status, legalMoves } = this.#wasmGameServer.snapshot()
-		return { revision, fen, status, legalMoves }
+		const { revision, fen, status, clock, legalMoves } = this.#wasmGameServer.snapshot()
+		const { whiteRemainingMs, blackRemainingMs, running } = clock
+		return {
+			revision,
+			fen,
+			status,
+			clock: {
+				whiteRemainingMs,
+				blackRemainingMs,
+				running,
+			},
+			legalMoves,
+		}
 	}
 
 	fetch(request: Request) {

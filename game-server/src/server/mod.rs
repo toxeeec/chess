@@ -19,7 +19,9 @@ use crate::{
     game_state::{GameState, PlayerConnected, StateChange},
     game_storage::GameStorage,
     moves::Move,
-    server::messages::{ClientMessage, ErrorMessage, MoveMessage, ServerMessage},
+    server::messages::{
+        ClientMessage, Clock, ErrorMessage, MoveMessage, ServerMessage, StatusMessage,
+    },
 };
 
 const PLAYER_HEADER: &str = "Player-Color";
@@ -39,6 +41,7 @@ impl GameServer {
         join_timeout_ms: i32,
         first_move_timeout_ms: i32,
         disconnect_timeout_ms: i32,
+        time_control_ms: i32,
     ) -> Result<()> {
         if self.state.borrow().is_some() {
             return Ok(());
@@ -48,6 +51,7 @@ impl GameServer {
             join_timeout_ms,
             first_move_timeout_ms,
             disconnect_timeout_ms,
+            time_control_ms,
         )?;
         self.schedule_next_alarm().await?;
 
@@ -56,7 +60,10 @@ impl GameServer {
 
     #[wasm_bindgen]
     pub fn snapshot(&self) -> SnapshotMessage {
-        SnapshotMessage::from(&*self.state().expect("game is not initialized"))
+        SnapshotMessage::new(
+            &self.state().expect("game is not initialized"),
+            Date::now() as i64,
+        )
     }
 }
 
@@ -81,8 +88,9 @@ impl DurableObject for GameServer {
             _ => return Response::error("Forbidden", 403),
         };
 
+        let now = Date::now() as i64;
         let snapshot = match self.state() {
-            Ok(state) => SnapshotMessage::from(&*state),
+            Ok(state) => SnapshotMessage::new(&state, now),
             Err(err) => return Response::error(err.to_string(), 409),
         };
 
@@ -97,9 +105,10 @@ impl DurableObject for GameServer {
 
     async fn alarm(&self) -> Result<Response> {
         {
+            let now = Date::now() as i64;
             let mut state = self.state_mut()?;
-            let change = state.process_due_event(Date::now() as i64);
-            self.handle_state_change(&state, change)?;
+            let change = state.process_due_event(now);
+            self.handle_state_change(&state, change, now)?;
         };
 
         self.schedule_next_alarm().await?;
@@ -130,22 +139,24 @@ impl DurableObject for GameServer {
             return Ok(());
         };
 
+        let now = Date::now() as i64;
         let move_message = {
-            let mut state = match self.state_mut() {
-                Ok(state) => state,
-                Err(error) => {
-                    ws.close(Some(1011), Some("game is not initialized"))?;
-                    return Err(error);
-                }
-            };
+            let mut state = self.state_mut()?;
 
-            if let Err(error) = state.make_move(player, mve) {
+            let due_change = state.process_due_event(now);
+            if due_change != StateChange::Unchanged {
+                self.handle_state_change(&state, due_change, now)?;
+                return Ok(());
+            }
+
+            if let Err(error) = state.make_move(player, mve, now) {
                 ws.send(&ServerMessage::Error(error.into()))?;
                 return Ok(());
             }
 
             self.storage.save(&state)?;
-            MoveMessage::new(mve, state.revision, &state.game)
+            let clock = Clock::new(&state, now);
+            MoveMessage::new(mve, state.revision, &state.game, clock)
         };
 
         let message = ServerMessage::Move(move_message);
@@ -179,12 +190,15 @@ impl GameServer {
         join_timeout_ms: i32,
         first_move_timeout_ms: i32,
         disconnect_timeout_ms: i32,
+        time_control_ms: i32,
     ) -> Result<()> {
         let game_state = self.storage.create_game(
             Game::default(),
             join_timeout_ms,
             first_move_timeout_ms,
             disconnect_timeout_ms,
+            time_control_ms,
+            time_control_ms,
         )?;
         self.state.replace(Some(game_state));
 
@@ -196,14 +210,15 @@ impl GameServer {
         let is_black_connected = self.is_player_connected(Player::Black)?;
 
         {
+            let now = Date::now() as i64;
             let mut state = self.state_mut()?;
             let change = state.player_connected(PlayerConnected {
                 player,
-                now: Date::now() as i64,
+                now,
                 is_white_connected,
                 is_black_connected,
             });
-            self.handle_state_change(&state, change)?;
+            self.handle_state_change(&state, change, now)?;
         };
 
         self.schedule_next_alarm().await?;
@@ -216,21 +231,22 @@ impl GameServer {
         }
 
         {
+            let now = Date::now() as i64;
             let mut state = self.state_mut()?;
-            let change = state.player_disconnected(player, Date::now() as i64);
-            self.handle_state_change(&state, change)?;
+            let change = state.player_disconnected(player, now);
+            self.handle_state_change(&state, change, now)?;
         }
 
         self.schedule_next_alarm().await?;
         Ok(())
     }
 
-    fn handle_state_change(&self, state: &GameState, change: StateChange) -> Result<()> {
+    fn handle_state_change(&self, state: &GameState, change: StateChange, now: i64) -> Result<()> {
         match change {
             StateChange::LifecycleChanged => {
                 self.storage.save(state)?;
 
-                let message = ServerMessage::Status(state.into());
+                let message = ServerMessage::Status(StatusMessage::new(state, now));
                 for socket in self.durable_state.get_websockets() {
                     socket.send(&message)?;
                 }

@@ -23,6 +23,7 @@ const GAME_CONFIG = {
 	joinTimeoutMs: 2 * 60_000,
 	firstMoveTimeoutMs: 30_000,
 	disconnectTimeoutMs: 60_000,
+	timeControlMs: 5 * 60_000,
 } as const
 
 export const redirectToRoom = createServerFn().handler(async () => {

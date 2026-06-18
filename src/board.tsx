@@ -1,27 +1,51 @@
 import { Modifier, type DragOperation } from "@dnd-kit/abstract"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
-import { useRef } from "react"
+import { createContext, use, useRef, useState, useSyncExternalStore } from "react"
 
-import { clsx } from "#/clsx"
-
-import { BoardStoreContext, useBoardStore, type BoardStore, type Piece } from "./board-store"
+import { clsx } from "./clsx"
+import { useGameStore, type Piece } from "./game-store"
+import type { Move } from "./use-live-room"
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1] as const
 
-const Square = {
-	getFile(square: number) {
-		return square % 8
-	},
-	getRank(square: number) {
-		return Math.floor(square / 8)
-	},
-	isLight(square: number) {
-		const rank = this.getRank(square)
-		const file = this.getFile(square)
-		return (rank + file) % 2 === 0
-	},
+type BoardStore = ReturnType<typeof createBoardStore>
+type BoardState = ReturnType<BoardStore["getState"]>
+
+const BoardStoreContext = createContext<BoardStore | null>(null)
+
+export function Board({ onMove }: { onMove: (move: Move) => void }) {
+	const ref = useRef<HTMLDivElement>(null)
+	const [boardStore] = useState(createBoardStore)
+
+	return (
+		<BoardStoreContext value={boardStore}>
+			<DragDropProvider
+				modifiers={[
+					SnapToPointer,
+					// oxlint-disable-next-line react/react-compiler
+					RestrictToElement.configure({
+						element: () => ref.current,
+					}),
+				]}
+				onDragStart={({ operation: { source } }) => {
+					boardStore.setDraggedPieceSquare(source ? Number(source.id) : null)
+				}}
+				onDragEnd={({ operation: { source, target } }) => {
+					if (source && target) onMove({ from: Number(source.id), to: Number(target.id) })
+					boardStore.setDraggedPieceSquare(null)
+				}}
+			>
+				<div className="relative grid size-[round(down,80vmin,8px)] grid-cols-8 justify-self-center">
+					<div ref={ref} className="absolute inset-[-6.25%] -z-10" />
+					{Array.from({ length: 64 }, (_, index) => index).map((square) => (
+						<BoardSquare key={square} square={square} />
+					))}
+				</div>
+			</DragDropProvider>
+		</BoardStoreContext>
+	)
 }
 
 class SnapToPointer extends Modifier {
@@ -42,43 +66,26 @@ class SnapToPointer extends Modifier {
 	}
 }
 
-export function Board({ store }: { store: BoardStore }) {
-	const ref = useRef<HTMLDivElement>(null)
-
-	return (
-		<BoardStoreContext value={store}>
-			<DragDropProvider
-				modifiers={[
-					SnapToPointer,
-					RestrictToElement.configure({
-						element: () => ref.current,
-					}),
-				]}
-				onDragStart={({ operation: { source } }) => {
-					store.setDraggedPieceSquare(source ? Number(source.id) : null)
-				}}
-				onDragEnd={({ operation: { source, target } }) => {
-					if (source && target) store.movePiece({ from: Number(source.id), to: Number(target.id) })
-					store.setDraggedPieceSquare(null)
-				}}
-			>
-				<div className="relative grid size-[round(down,80vmin,8px)] grid-cols-8 justify-self-center">
-					<div ref={ref} className="absolute inset-[-6.25%]" />
-					{Array.from({ length: 64 }, (_, index) => index).map((square) => (
-						<BoardSquare key={square} square={square} />
-					))}
-				</div>
-			</DragDropProvider>
-		</BoardStoreContext>
-	)
+const Square = {
+	getFile(square: number) {
+		return square % 8
+	},
+	getRank(square: number) {
+		return Math.floor(square / 8)
+	},
+	isLight(square: number) {
+		const rank = this.getRank(square)
+		const file = this.getFile(square)
+		return (rank + file) % 2 === 0
+	},
 }
 
 function BoardSquare({ square }: { square: number }) {
-	const piece = useBoardStore((store) => store.board[square])
-	const isLegalMoveTarget = useBoardStore((store) =>
+	const piece = useGameStore((store) => store.board[square])
+	const isLegalMoveTarget = useGameStore((store) =>
 		store.legalMoves.some(({ to }) => to === square),
 	)
-	const disabled = useBoardStore((store) => !store.legalMoves.some(({ from }) => from === square))
+	const disabled = useGameStore((store) => !store.legalMoves.some(({ from }) => from === square))
 	const { isDropTarget, ref } = useDroppable({
 		id: square,
 	})
@@ -101,11 +108,47 @@ function BoardSquare({ square }: { square: number }) {
 	)
 }
 
+function createBoardStore() {
+	let state = { draggedPieceSquare: null as number | null }
+	const listeners = new Set<() => void>()
+	const notify = () => {
+		for (const listener of listeners) {
+			listener()
+		}
+	}
+
+	return {
+		getState: () => state,
+		setDraggedPieceSquare: (draggedPieceSquare: number | null) => {
+			if (state.draggedPieceSquare === draggedPieceSquare) return
+
+			state = { draggedPieceSquare }
+			notify()
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => listeners.delete(listener)
+		},
+	}
+}
+
+function useBoardStore<T>(selector: (state: BoardState) => T) {
+	const store = use(BoardStoreContext)
+	if (!store) throw new Error("useBoardStore must be used within BoardStoreContext")
+
+	return useSyncExternalStore(
+		store.subscribe,
+		() => selector(store.getState()),
+		() => selector(store.getState()),
+	)
+}
+
 function LegalMoveDot({ square }: { square: number }) {
+	const legalMoves = useGameStore((store) => store.legalMoves)
 	const visible = useBoardStore(
 		(store) =>
 			store.draggedPieceSquare !== null &&
-			store.legalMoves.some(({ from, to }) => from === store.draggedPieceSquare && to === square),
+			legalMoves.some(({ from, to }) => from === store.draggedPieceSquare && to === square),
 	)
 
 	return (

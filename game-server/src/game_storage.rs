@@ -4,7 +4,7 @@ use worker::{Date, Result, SqlStorageValue, Storage};
 
 use crate::{
     game::Game,
-    game_state::{GameLifecycle, GameState, GameTimeouts},
+    game_state::{GameClock, GameLifecycle, GameState, GameTimeouts},
 };
 
 pub(super) struct GameStorage {
@@ -32,6 +32,8 @@ struct SqlGameRow {
     join_timeout_ms: i32,
     first_move_timeout_ms: i32,
     disconnect_timeout_ms: i32,
+    white_remaining_ms: i32,
+    black_remaining_ms: i32,
 }
 
 impl GameStatus {
@@ -74,7 +76,9 @@ impl GameStorage {
                 turn_started_at INTEGER, \
                 join_timeout_ms INTEGER NOT NULL, \
                 first_move_timeout_ms INTEGER NOT NULL, \
-                disconnect_timeout_ms INTEGER NOT NULL\
+                disconnect_timeout_ms INTEGER NOT NULL, \
+                white_remaining_ms INTEGER NOT NULL, \
+                black_remaining_ms INTEGER NOT NULL\
             );",
             None,
         )?;
@@ -94,11 +98,13 @@ impl GameStorage {
                     created_at, \
                     white_disconnected_at, \
                     black_disconnected_at, \
-                    turn_started_at, \
-                    join_timeout_ms, \
-                    first_move_timeout_ms, \
-                    disconnect_timeout_ms \
-                 FROM game WHERE id = 1;",
+                     turn_started_at, \
+                     join_timeout_ms, \
+                     first_move_timeout_ms, \
+                     disconnect_timeout_ms, \
+                     white_remaining_ms, \
+                     black_remaining_ms \
+                  FROM game WHERE id = 1;",
                 None,
             )?
             .to_array::<SqlGameRow>()?;
@@ -112,6 +118,8 @@ impl GameStorage {
         join_timeout_ms: i32,
         first_move_timeout_ms: i32,
         disconnect_timeout_ms: i32,
+        white_remaining_ms: i32,
+        black_remaining_ms: i32,
     ) -> Result<GameState> {
         if let Some(stored_game) = self.load()? {
             return Ok(stored_game);
@@ -128,8 +136,10 @@ impl GameStorage {
                 created_at, \
                 join_timeout_ms, \
                 first_move_timeout_ms, \
-                disconnect_timeout_ms\
-             ) VALUES (1, 0, 'waiting', ?, ?, ?, ?, ?) \
+                disconnect_timeout_ms, \
+                white_remaining_ms, \
+                black_remaining_ms\
+             ) VALUES (1, 0, 'waiting', ?, ?, ?, ?, ?, ?, ?) \
              ON CONFLICT(id) DO NOTHING;",
             vec![
                 SqlStorageValue::from(game.fen()),
@@ -137,6 +147,8 @@ impl GameStorage {
                 SqlStorageValue::from(join_timeout_ms),
                 SqlStorageValue::from(first_move_timeout_ms),
                 SqlStorageValue::from(disconnect_timeout_ms),
+                SqlStorageValue::from(white_remaining_ms),
+                SqlStorageValue::from(black_remaining_ms),
             ],
         )?;
 
@@ -147,6 +159,10 @@ impl GameStorage {
                 join_timeout_ms,
                 first_move_timeout_ms,
                 disconnect_timeout_ms,
+            },
+            clock: GameClock {
+                white_remaining_ms,
+                black_remaining_ms,
             },
             lifecycle: GameLifecycle::Waiting { created_at },
         })
@@ -160,7 +176,9 @@ impl GameStorage {
                 fen = ?, \
                 white_disconnected_at = ?, \
                 black_disconnected_at = ?, \
-                turn_started_at = ? \
+                turn_started_at = ?, \
+                white_remaining_ms = ?, \
+                black_remaining_ms = ? \
              WHERE id = 1;",
             vec![
                 SqlStorageValue::from(state.revision as i32),
@@ -169,6 +187,8 @@ impl GameStorage {
                 SqlStorageValue::from(state.white_disconnected_at()),
                 SqlStorageValue::from(state.black_disconnected_at()),
                 SqlStorageValue::from(state.turn_started_at()),
+                SqlStorageValue::from(state.clock.white_remaining_ms),
+                SqlStorageValue::from(state.clock.black_remaining_ms),
             ],
         )?;
 
@@ -221,6 +241,10 @@ impl TryFrom<SqlGameRow> for GameState {
                 join_timeout_ms: row.join_timeout_ms,
                 first_move_timeout_ms: row.first_move_timeout_ms,
                 disconnect_timeout_ms: row.disconnect_timeout_ms,
+            },
+            clock: GameClock {
+                white_remaining_ms: row.white_remaining_ms,
+                black_remaining_ms: row.black_remaining_ms,
             },
             lifecycle,
         })

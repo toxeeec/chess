@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 
 import { Board } from "#/board"
-import { createBoardStore } from "#/board-store"
+import { GameStoreContext, createGameStore } from "#/game-store"
+import { PlayerClock } from "#/player-clock"
 import { getGameState, ensureRoomSessionMatches } from "#/room"
 import { moveCodec, snapshotMessageSchema, useLiveRoom } from "#/use-live-room"
 
@@ -23,8 +24,29 @@ function RouteComponent() {
 	const snapshot = snapshotMessageSchema.parse(data)
 	const lastRevision = useRef(-1)
 
+	const { send, reconnect } = useLiveRoom({
+		roomId,
+		onSnapshot: (snapshot) => {
+			if (snapshot.revision <= lastRevision.current) return
+			store.setState(snapshot)
+			lastRevision.current = snapshot.revision
+		},
+		onStatus: ({ legalMoves, clock }) => {
+			store.setState({ legalMoves, clock })
+		},
+		onMove: ({ revision, move, legalMoves, turn, clock }) => {
+			if (revision <= lastRevision.current) return
+			if (revision !== lastRevision.current + 1) {
+				reconnect()
+			} else {
+				store.applyMove({ move, legalMoves, turn, clock })
+				lastRevision.current = revision
+			}
+		},
+	})
+
 	const [store] = useState(() =>
-		createBoardStore({
+		createGameStore({
 			snapshot,
 			player,
 			onMove: (move) => {
@@ -33,30 +55,15 @@ function RouteComponent() {
 		}),
 	)
 
-	const { send, reconnect } = useLiveRoom({
-		roomId,
-		onSnapshot: (snapshot) => {
-			if (snapshot.revision <= lastRevision.current) return
-			store.setState(snapshot)
-			lastRevision.current = snapshot.revision
-		},
-		onStatus: ({ legalMoves }) => {
-			store.setLegalMoves(legalMoves)
-		},
-		onMove: ({ revision, move, legalMoves, turn }) => {
-			if (revision <= lastRevision.current) return
-			if (revision !== lastRevision.current + 1) {
-				reconnect()
-			} else {
-				store.applyMove({ move, legalMoves, turn })
-				lastRevision.current = revision
-			}
-		},
-	})
-
 	return (
 		<div className="h-full content-center">
-			<Board store={store} />
+			<GameStoreContext value={store}>
+				<div className="grid justify-center gap-[1.5vmin]">
+					<PlayerClock player="black" />
+					<Board onMove={store.movePiece} />
+					<PlayerClock player="white" />
+				</div>
+			</GameStoreContext>
 		</div>
 	)
 }

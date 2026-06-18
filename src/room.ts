@@ -62,8 +62,9 @@ export const roomSessionMiddleware = createMiddleware().server(async ({ next }) 
 export const getGameState = createServerFn()
 	.middleware([roomSessionMiddleware])
 	.handler(async ({ context: { roomSession, player } }) => {
-		const { revision, fen, status, legalMoves } = await env.GAME_SERVER.getByName(
+		const { [Symbol.dispose]: _dispose, ...snapshot } = await env.GAME_SERVER.getByName(
 			roomSession.roomId,
 		).snapshot()
-		return { revision, fen, status, legalMoves, player }
+
+		return { ...snapshot, player }
 	})

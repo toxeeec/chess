@@ -41,24 +41,35 @@ const movesSchema = z
 	.transform((moves) => (moves === "" ? [] : moves.split(" ")))
 	.pipe(z.array(moveCodec))
 
+const playerSchema = z.enum(["white", "black"])
+
+const clockSchema = z.object({
+	whiteRemainingMs: z.number().int().nonnegative(),
+	blackRemainingMs: z.number().int().nonnegative(),
+	running: z.boolean(),
+})
+
+export type Clock = z.infer<typeof clockSchema>
+
 export const snapshotMessageSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	fen: z.string(),
 	status: z.enum(["waiting", "active", "ended", "expired"]),
+	clock: clockSchema,
 	legalMoves: movesSchema,
 })
 
 const statusMessageSchema = z.object({
 	status: snapshotMessageSchema.shape.status,
+	clock: clockSchema,
 	legalMoves: movesSchema,
 })
-
-const playerSchema = z.enum(["white", "black"])
 
 const moveMessageSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	move: moveCodec,
 	turn: playerSchema,
+	clock: clockSchema,
 	legalMoves: movesSchema,
 })
 

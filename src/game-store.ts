@@ -1,17 +1,17 @@
 import { createContext, use, useSyncExternalStore } from "react"
 
 import type { Player } from "./room"
-import type { Move } from "./use-live-room"
+import type { Clock, Move } from "./use-live-room"
 
 const PIECES = ["r", "n", "b", "q", "k", "p", "R", "N", "B", "Q", "K", "P"] as const
 export type Piece = (typeof PIECES)[number]
 
-export type BoardStore = ReturnType<typeof createBoardStore>
-type BoardState = ReturnType<BoardStore["getState"]>
-type Snapshot = Parameters<typeof createBoardState>[0]
+type GameStore = ReturnType<typeof createGameStore>
+type GameState = ReturnType<GameStore["getState"]>
+type Snapshot = { fen: string; legalMoves: readonly Move[]; clock: Clock }
 
-export function createBoardStore({
-	snapshot,
+export function createGameStore({
+	snapshot: { fen, legalMoves, clock },
 	player,
 	onMove,
 }: {
@@ -19,7 +19,15 @@ export function createBoardStore({
 	player: Player
 	onMove?: (move: Move) => void
 }) {
-	let state = createBoardState(snapshot, player)
+	const turn = getTurnFromFen(fen)
+	let state = {
+		board: createBoardFromFen(fen),
+		turn,
+		player,
+		clock: { ...clock, receivedAtMs: Date.now() },
+		legalMoves: turn === player ? legalMoves : [],
+	}
+
 	const listeners = new Set<() => void>()
 	const notify = () => {
 		for (const listener of listeners) {
@@ -29,21 +37,21 @@ export function createBoardStore({
 
 	return {
 		getState: () => state,
-		setState: (snapshot: Snapshot) => {
-			state = createBoardState(snapshot, player)
-			notify()
-		},
-		setLegalMoves: (legalMoves: readonly Move[]) => {
+		setState: (snapshot: Partial<Snapshot>) => {
+			const turn = snapshot.fen ? getTurnFromFen(snapshot.fen) : state.turn
 			state = {
 				...state,
-				legalMoves: state.turn === state.player ? legalMoves : [],
+				turn,
+				...(snapshot.fen && {
+					board: createBoardFromFen(snapshot.fen),
+				}),
+				...(snapshot.clock && {
+					clock: { ...snapshot.clock, receivedAtMs: Date.now() },
+				}),
+				...(snapshot.legalMoves && {
+					legalMoves: turn === player ? snapshot.legalMoves : [],
+				}),
 			}
-			notify()
-		},
-		setDraggedPieceSquare: (draggedPieceSquare: number | null) => {
-			if (state.draggedPieceSquare === draggedPieceSquare) return
-
-			state = { ...state, draggedPieceSquare }
 			notify()
 		},
 		movePiece: (move: Move) => {
@@ -58,8 +66,8 @@ export function createBoardStore({
 				...state,
 				board,
 				turn: opponent(state.turn),
+				clock: switchClock(state.clock, state.player, state.turn),
 				legalMoves: [],
-				draggedPieceSquare: null,
 			}
 
 			onMove?.(move)
@@ -69,10 +77,12 @@ export function createBoardStore({
 			move,
 			legalMoves,
 			turn,
+			clock,
 		}: {
 			move: Move
 			legalMoves: readonly Move[]
 			turn: Player
+			clock: Clock
 		}) => {
 			const movingPiece = state.board[move.from]
 			if (!movingPiece) return
@@ -84,6 +94,7 @@ export function createBoardStore({
 				...state,
 				board,
 				turn,
+				clock: { ...clock, receivedAtMs: Date.now() },
 				legalMoves: turn === player ? legalMoves : [],
 			}
 			notify()
@@ -95,26 +106,24 @@ export function createBoardStore({
 	}
 }
 
-export const BoardStoreContext = createContext<BoardStore | null>(null)
+export const GameStoreContext = createContext<GameStore | null>(null)
 
-function createBoardState(
-	{
-		fen,
-		legalMoves,
-	}: {
-		fen: string
-		legalMoves: readonly Move[]
-	},
-	player: Player,
-) {
-	const turn = getTurnFromFen(fen)
+function switchClock(clock: GameState["clock"], player: Player, turn: Player) {
+	const now = Date.now()
+	const active = clock.running && turn === player
+	const key = player === "white" ? "whiteRemainingMs" : "blackRemainingMs"
+	const currentRemainingMs = clock[key]
+
+	const remainingMs = active
+		? Math.max(0, currentRemainingMs - (now - clock.receivedAtMs))
+		: currentRemainingMs
+
 	return {
-		board: createBoardFromFen(fen),
-		draggedPieceSquare: null as number | null,
-		turn,
-		player,
-		legalMoves: turn === player ? legalMoves : [],
-	} as const
+		...clock,
+		[key]: remainingMs,
+		receivedAtMs: now,
+		running: true,
+	}
 }
 
 function getTurnFromFen(fen: string): Player {
@@ -163,9 +172,9 @@ function createBoardFromFen(fen: string) {
 	return nextBoard
 }
 
-export function useBoardStore<T>(selector: (state: BoardState) => T) {
-	const store = use(BoardStoreContext)
-	if (!store) throw new Error("useBoardStore must be used within BoardStoreContext")
+export function useGameStore<T>(selector: (state: GameState) => T) {
+	const store = use(GameStoreContext)
+	if (!store) throw new Error("useGameStore must be used within GameStoreContext")
 
 	return useSyncExternalStore(
 		store.subscribe,
@@ -180,6 +189,12 @@ function isPiece(piece: string): piece is Piece {
 
 if (import.meta.vitest) {
 	const { it, expect, vi } = import.meta.vitest
+	const TEST_CLOCK = {
+		whiteRemainingMs: 300_000,
+		blackRemainingMs: 300_000,
+		running: false,
+	} as const satisfies Clock
+
 	it.concurrent("returns valid board state for initial fen", () => {
 		expect(createBoardFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")).toEqual([
 			..."rnbqkbnrpppppppp".split(""),
@@ -189,10 +204,11 @@ if (import.meta.vitest) {
 	})
 
 	it.concurrent("ignores illegal moves and applies legal moves", () => {
-		const store = createBoardStore({
+		const store = createGameStore({
 			player: "white",
 			snapshot: {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
 				legalMoves: [{ from: 52, to: 44 }],
 			},
 		})
@@ -210,11 +226,12 @@ if (import.meta.vitest) {
 
 	it.concurrent("calls onMove only for legal moves", () => {
 		const onMove = vi.fn()
-		const store = createBoardStore({
+		const store = createGameStore({
 			player: "white",
 			onMove,
 			snapshot: {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
 				legalMoves: [{ from: 52, to: 44 }],
 			},
 		})
@@ -229,11 +246,12 @@ if (import.meta.vitest) {
 
 	it.concurrent("does not move pieces without a matching legal move", () => {
 		const onMove = vi.fn()
-		const store = createBoardStore({
+		const store = createGameStore({
 			player: "white",
 			onMove,
 			snapshot: {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
 				legalMoves: [],
 			},
 		})
@@ -247,28 +265,44 @@ if (import.meta.vitest) {
 
 	it.concurrent("filters legal moves to the current player", () => {
 		const legalMoves = [{ from: 52, to: 44 }]
-		const store = createBoardStore({
+		const store = createGameStore({
 			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", legalMoves },
+			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves },
 		})
 
 		expect(store.getState().turn).toBe("white")
 		expect(store.getState().legalMoves).toEqual([])
 
-		store.setState({ fen: "8/3p4/8/8/8/8/8/8 b - - 0 1", legalMoves })
+		store.setState({ fen: "8/3p4/8/8/8/8/8/8 b - - 0 1", clock: TEST_CLOCK, legalMoves })
 
 		expect(store.getState().turn).toBe("black")
 		expect(store.getState().legalMoves).toEqual(legalMoves)
 	})
 
-	it.concurrent("applies remote moves and filters legal moves by turn", () => {
-		const legalMoves = [{ from: 11, to: 19 }]
-		const store = createBoardStore({
-			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", legalMoves: [] },
+	it.concurrent("updates the clock from snapshots", () => {
+		const nextClock = {
+			whiteRemainingMs: 299_000,
+			blackRemainingMs: 300_000,
+			running: true,
+		} as const satisfies Clock
+		const store = createGameStore({
+			player: "white",
+			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
 		})
 
-		store.applyMove({ move: { from: 52, to: 44 }, turn: "black", legalMoves })
+		store.setState({ clock: nextClock })
+
+		expect(store.getState().clock).toMatchObject(nextClock)
+	})
+
+	it.concurrent("applies remote moves and filters legal moves by turn", () => {
+		const legalMoves = [{ from: 11, to: 19 }]
+		const store = createGameStore({
+			player: "black",
+			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
+		})
+
+		store.applyMove({ move: { from: 52, to: 44 }, turn: "black", clock: TEST_CLOCK, legalMoves })
 
 		expect(store.getState().board[52]).toBeUndefined()
 		expect(store.getState().board[44]).toBe("P")
@@ -278,12 +312,12 @@ if (import.meta.vitest) {
 
 	it.concurrent("hides legal moves when it is the opponent's turn", () => {
 		const legalMoves = [{ from: 52, to: 44 }]
-		const store = createBoardStore({
+		const store = createGameStore({
 			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", legalMoves: [] },
+			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
 		})
 
-		store.applyMove({ move: { from: 52, to: 44 }, turn: "white", legalMoves })
+		store.applyMove({ move: { from: 52, to: 44 }, turn: "white", clock: TEST_CLOCK, legalMoves })
 
 		expect(store.getState().board[52]).toBeUndefined()
 		expect(store.getState().board[44]).toBe("P")

@@ -10,6 +10,7 @@ export const TEST_GAME_CONFIG = {
 	joinTimeoutMs: 1000,
 	firstMoveTimeoutMs: 500,
 	disconnectTimeoutMs: 300,
+	timeControlMs: 2000,
 } as const
 
 export async function runInStartContext<T>(fn: () => T | Promise<T>, requestInit?: RequestInit) {

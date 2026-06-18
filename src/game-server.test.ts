@@ -1,6 +1,6 @@
 import { runDurableObjectAlarm } from "cloudflare:test"
 import { env } from "cloudflare:workers"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, type DeeplyAllowMatchers } from "vitest"
 
 import type { Player, RoomId } from "./room"
 import { generateRoomId } from "./room.server"
@@ -10,15 +10,43 @@ function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function expectSnapshotMessage(messagePromise: Promise<unknown>) {
-	return expect(messagePromise).resolves.toEqual({
+function clockMatcher(matcher?: DeeplyAllowMatchers<any>) {
+	return expect.objectContaining({
+		whiteRemainingMs: expect.any(Number),
+		blackRemainingMs: expect.any(Number),
+		running: expect.any(Boolean),
+		...matcher,
+	})
+}
+
+function snapshotMessageMatcher(dataMatcher?: DeeplyAllowMatchers<any>) {
+	const { clock, ...dataMatcherRest } = dataMatcher ?? {}
+
+	return {
 		type: "snapshot",
 		data: expect.objectContaining({
+			clock: clockMatcher(clock),
 			fen: expect.any(String),
 			revision: expect.any(Number),
 			status: expect.any(String),
+			legalMoves: expect.toBeOneOf([expect.any(String), null]),
+			...dataMatcherRest,
 		}),
-	})
+	}
+}
+
+function statusMessageMatcher(dataMatcher?: DeeplyAllowMatchers<any>) {
+	const { clock, ...dataMatcherRest } = dataMatcher ?? {}
+
+	return {
+		type: "status",
+		data: expect.objectContaining({
+			status: expect.any(String),
+			clock: clockMatcher(clock),
+			legalMoves: expect.toBeOneOf([expect.any(String), null]),
+			...dataMatcherRest,
+		}),
+	}
 }
 
 function createWebSocketMessageReader(webSocket: WebSocket) {
@@ -89,22 +117,19 @@ async function connectPlayers(roomId: RoomId) {
 		acceptWebSocket(roomId, "black"),
 	])
 	await Promise.all([
-		expectSnapshotMessage(white.readMessage()),
-		expectSnapshotMessage(black.readMessage()),
-	])
-	const [whiteStatusMessage, blackStatusMessage] = await Promise.all([
-		white.readMessage(),
-		black.readMessage(),
+		expect(white.readMessage()).resolves.toEqual(snapshotMessageMatcher()),
+		expect(black.readMessage()).resolves.toEqual(snapshotMessageMatcher()),
 	])
 
-	expect(whiteStatusMessage).toEqual({
-		type: "status",
-		data: { status: "active", legalMoves: expect.any(String) },
+	const expected = statusMessageMatcher({
+		status: "active",
+		clock: { running: false },
+		legalMoves: expect.any(String),
 	})
-	expect(blackStatusMessage).toEqual({
-		type: "status",
-		data: { status: "active", legalMoves: expect.any(String) },
-	})
+	await Promise.all([
+		expect(white.readMessage()).resolves.toEqual(expected),
+		expect(black.readMessage()).resolves.toEqual(expected),
+	])
 
 	return {
 		white,
@@ -125,15 +150,18 @@ describe("GameServer", () => {
 			joinTimeoutMs: 1,
 		})
 		using whiteConnection = await acceptWebSocket(roomId, "white")
-		await expectSnapshotMessage(whiteConnection.readMessage())
+		await whiteConnection.readMessage()
 
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
 
-		expect(await whiteConnection.readMessage()).toEqual({
-			type: "status",
-			data: { status: "expired", legalMoves: "" },
-		})
+		await expect(whiteConnection.readMessage()).resolves.toEqual(
+			statusMessageMatcher({
+				status: "expired",
+				clock: { running: false },
+				legalMoves: "",
+			}),
+		)
 	})
 
 	it.concurrent("first move timeout broadcasts expired status", async () => {
@@ -148,16 +176,85 @@ describe("GameServer", () => {
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
 
+		const expectedMessage = statusMessageMatcher({
+			status: "expired",
+			clock: { running: false },
+			legalMoves: "",
+		})
 		await Promise.all([
-			expect(connections.white.readMessage()).resolves.toEqual({
-				type: "status",
-				data: { status: "expired", legalMoves: "" },
-			}),
-			expect(connections.black.readMessage()).resolves.toEqual({
-				type: "status",
-				data: { status: "expired", legalMoves: "" },
-			}),
+			expect(connections.white.readMessage()).resolves.toEqual(expectedMessage),
+			expect(connections.black.readMessage()).resolves.toEqual(expectedMessage),
 		])
+	})
+
+	it.concurrent("chess clock timeout broadcasts ended status after first move", async () => {
+		const roomId = generateRoomId()
+		const stub = env.GAME_SERVER.getByName(roomId)
+		await stub.init({
+			...TEST_GAME_CONFIG,
+			firstMoveTimeoutMs: 1_000,
+			timeControlMs: 1,
+		})
+		using connections = await connectPlayers(roomId)
+		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
+		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
+
+		await sleep(10)
+		await runDurableObjectAlarm(stub)
+
+		const expected = statusMessageMatcher({
+			status: "ended",
+			clock: { blackRemainingMs: 0, running: false },
+			legalMoves: "",
+		})
+		await Promise.all([
+			expect(connections.white.readMessage()).resolves.toEqual(expected),
+			expect(connections.black.readMessage()).resolves.toEqual(expected),
+		])
+
+		using newConnection = await acceptWebSocket(roomId, "white")
+		await expect(newConnection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({
+				revision: 1,
+				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1",
+				status: "ended",
+				clock: { blackRemainingMs: 0, running: false },
+				legalMoves: "",
+			}),
+		)
+	})
+
+	it.concurrent("rejects moves after chess clock timeout ends the game", async () => {
+		const roomId = generateRoomId()
+		const stub = env.GAME_SERVER.getByName(roomId)
+		await stub.init({
+			...TEST_GAME_CONFIG,
+			firstMoveTimeoutMs: 1_000,
+			timeControlMs: 1,
+		})
+		using connections = await connectPlayers(roomId)
+		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
+		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
+
+		await sleep(10)
+		await runDurableObjectAlarm(stub)
+
+		const expected = statusMessageMatcher({
+			status: "ended",
+			clock: { blackRemainingMs: 0, running: false },
+			legalMoves: "",
+		})
+		await Promise.all([
+			expect(connections.white.readMessage()).resolves.toEqual(expected),
+			expect(connections.black.readMessage()).resolves.toEqual(expected),
+		])
+
+		connections.black.webSocket.send(JSON.stringify({ type: "move", data: "a7a6" }))
+
+		await expect(connections.black.readMessage()).resolves.toEqual({
+			type: "error",
+			data: "game-not-active",
+		})
 	})
 
 	it.concurrent("disconnect timeout broadcasts expired status if no moves were made", async () => {
@@ -173,10 +270,13 @@ describe("GameServer", () => {
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
 
-		await expect(connections.black.readMessage()).resolves.toEqual({
-			type: "status",
-			data: { status: "expired", legalMoves: "" },
-		})
+		await expect(connections.black.readMessage()).resolves.toEqual(
+			statusMessageMatcher({
+				status: "expired",
+				clock: { running: false },
+				legalMoves: "",
+			}),
+		)
 	})
 
 	it.concurrent("disconnect timeout broadcasts ended status after a move", async () => {
@@ -194,10 +294,13 @@ describe("GameServer", () => {
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
 
-		await expect(connections.black.readMessage()).resolves.toEqual({
-			type: "status",
-			data: { status: "ended", legalMoves: "" },
-		})
+		await expect(connections.black.readMessage()).resolves.toEqual(
+			statusMessageMatcher({
+				status: "ended",
+				clock: { running: false },
+				legalMoves: "",
+			}),
+		)
 	})
 
 	it.concurrent("returns forbidden when the player header is missing", async () => {
@@ -227,15 +330,14 @@ describe("GameServer", () => {
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
 
-		await expect(connection.readMessage()).resolves.toEqual({
-			type: "snapshot",
-			data: {
+		await expect(connection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({
 				revision: 0,
 				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
 				status: "waiting",
 				legalMoves: "",
-			},
-		})
+			}),
+		)
 	})
 
 	it.concurrent("broadcasts moves to connected room sockets", async () => {
@@ -245,22 +347,25 @@ describe("GameServer", () => {
 
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
 
-		const [whiteMove, blackMove] = await Promise.all([
-			connections.white.readMessage(),
-			connections.black.readMessage(),
-		])
-		const expectedMoveMessage = {
+		const expected = {
 			type: "move",
-			data: {
+			data: expect.objectContaining({
 				revision: 1,
 				move: "e2e3",
 				turn: "black",
+				clock: expect.objectContaining({
+					whiteRemainingMs: TEST_GAME_CONFIG.timeControlMs,
+					blackRemainingMs: TEST_GAME_CONFIG.timeControlMs,
+					running: true,
+				}),
 				legalMoves: expect.any(String),
-			},
+			}),
 		}
 
-		expect(whiteMove).toEqual(expectedMoveMessage)
-		expect(blackMove).toEqual(expectedMoveMessage)
+		await Promise.all([
+			expect(connections.white.readMessage()).resolves.toEqual(expected),
+			expect(connections.black.readMessage()).resolves.toEqual(expected),
+		])
 	})
 
 	it.concurrent("sends latest game snapshot to new websocket connections", async () => {
@@ -269,18 +374,19 @@ describe("GameServer", () => {
 		using connections = await connectPlayers(roomId)
 
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
+		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
 
 		using newConnection = await acceptWebSocket(roomId, "black")
 
-		await expect(newConnection.readMessage()).resolves.toEqual({
-			type: "snapshot",
-			data: {
+		await expect(newConnection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({
 				revision: 1,
 				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1",
 				status: "active",
+				clock: { running: true },
 				legalMoves: expect.any(String),
-			},
-		})
+			}),
+		)
 	})
 
 	it.concurrent("sends expired snapshots to new connections after join timeout", async () => {
@@ -291,25 +397,22 @@ describe("GameServer", () => {
 			joinTimeoutMs: 1,
 		})
 		using whiteConnection = await acceptWebSocket(roomId, "white")
-		await expectSnapshotMessage(whiteConnection.readMessage())
+		await whiteConnection.readMessage()
 
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
-		expect(await whiteConnection.readMessage()).toEqual({
-			type: "status",
-			data: { status: "expired", legalMoves: "" },
-		})
 
 		using blackConnection = await acceptWebSocket(roomId, "black")
-		await expect(blackConnection.readMessage()).resolves.toEqual({
-			type: "snapshot",
-			data: {
+
+		await expect(blackConnection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({
 				revision: 0,
 				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
 				status: "expired",
+				clock: { running: false },
 				legalMoves: "",
-			},
-		})
+			}),
+		)
 	})
 
 	it.concurrent("sends expired snapshots to new connections after first move timeout", async () => {
@@ -319,43 +422,32 @@ describe("GameServer", () => {
 			...TEST_GAME_CONFIG,
 			firstMoveTimeoutMs: 1,
 		})
-		using connections = await connectPlayers(roomId)
+		using _ = await connectPlayers(roomId)
 
 		await sleep(10)
 		await runDurableObjectAlarm(stub)
 
-		await Promise.all([
-			expect(connections.white.readMessage()).resolves.toEqual({
-				type: "status",
-				data: { status: "expired", legalMoves: "" },
-			}),
-			expect(connections.black.readMessage()).resolves.toEqual({
-				type: "status",
-				data: { status: "expired", legalMoves: "" },
-			}),
-		])
-
 		using newConnection = await acceptWebSocket(roomId, "white")
-		await expect(newConnection.readMessage()).resolves.toEqual({
-			type: "snapshot",
-			data: {
+		await expect(newConnection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({
 				revision: 0,
 				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
 				status: "expired",
+				clock: { running: false },
 				legalMoves: "",
-			},
-		})
+			}),
+		)
 	})
 
 	it.concurrent("rejects moves before both players join", async () => {
 		const roomId = generateRoomId()
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
-		await expectSnapshotMessage(connection.readMessage())
+		await connection.readMessage()
 
 		connection.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
 
-		expect(await connection.readMessage()).toEqual({
+		await expect(connection.readMessage()).resolves.toEqual({
 			type: "error",
 			data: "game-not-active",
 		})
@@ -365,11 +457,11 @@ describe("GameServer", () => {
 		const roomId = generateRoomId()
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
-		await expectSnapshotMessage(connection.readMessage())
+		await expect(connection.readMessage()).resolves.toEqual(snapshotMessageMatcher())
 
 		connection.webSocket.send("not json")
 
-		expect(await connection.readMessage()).toEqual({
+		await expect(connection.readMessage()).resolves.toEqual({
 			type: "error",
 			data: "invalid-message",
 		})
@@ -379,11 +471,11 @@ describe("GameServer", () => {
 		const roomId = generateRoomId()
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
-		await expectSnapshotMessage(connection.readMessage())
+		await expect(connection.readMessage()).resolves.toEqual(snapshotMessageMatcher())
 
 		connection.webSocket.send(JSON.stringify({ type: "move", data: "e2e" }))
 
-		expect(await connection.readMessage()).toEqual({
+		await expect(connection.readMessage()).resolves.toEqual({
 			type: "error",
 			data: "invalid-move-format",
 		})
@@ -396,7 +488,7 @@ describe("GameServer", () => {
 
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e5" }))
 
-		expect(await connections.white.readMessage()).toEqual({
+		await expect(connections.white.readMessage()).resolves.toEqual({
 			type: "error",
 			data: "illegal-move",
 		})
@@ -409,7 +501,7 @@ describe("GameServer", () => {
 
 		connections.black.webSocket.send(JSON.stringify({ type: "move", data: "a7a6" }))
 
-		expect(await connections.black.readMessage()).toEqual({
+		await expect(connections.black.readMessage()).resolves.toEqual({
 			type: "error",
 			data: "not-your-turn",
 		})

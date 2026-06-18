@@ -27,6 +27,7 @@ export default defineConfig({
 	],
 	rules: {
 		"no-shadow": "off",
+		"react/react-compiler": "error",
 		"react/react-in-jsx-scope": "off",
 		"typescript/no-explicit-any": "error",
 	},
