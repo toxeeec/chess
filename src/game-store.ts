@@ -1,4 +1,4 @@
-import { createContext, use, useSyncExternalStore } from "react"
+import { createContext, use, useRef, useSyncExternalStore } from "react"
 
 import type { Player } from "./room"
 import type { Clock, Move } from "./use-live-room"
@@ -108,6 +108,36 @@ export function createGameStore({
 
 export const GameStoreContext = createContext<GameStore | null>(null)
 
+export function useGameStore<T>(selector: (state: GameState) => T) {
+	const store = use(GameStoreContext)
+	if (!store) throw new Error("useGameStore must be used within GameStoreContext")
+
+	return useSyncExternalStore(
+		store.subscribe,
+		() => selector(store.getState()),
+		() => selector(store.getState()),
+	)
+}
+
+export function useShallow<State, Selected extends readonly unknown[]>(
+	selector: (state: State) => Selected,
+) {
+	const previous = useRef<Selected>(undefined)
+	const hasPrevious = useRef(false)
+
+	return (state: State) => {
+		const next = selector(state)
+
+		if (hasPrevious.current && shallow(previous.current!, next)) {
+			return previous.current!
+		}
+
+		previous.current = next
+		hasPrevious.current = true
+		return next
+	}
+}
+
 function switchClock(clock: GameState["clock"], player: Player, turn: Player) {
 	const now = Date.now()
 	const active = clock.running && turn === player
@@ -172,19 +202,18 @@ function createBoardFromFen(fen: string) {
 	return nextBoard
 }
 
-export function useGameStore<T>(selector: (state: GameState) => T) {
-	const store = use(GameStoreContext)
-	if (!store) throw new Error("useGameStore must be used within GameStoreContext")
-
-	return useSyncExternalStore(
-		store.subscribe,
-		() => selector(store.getState()),
-		() => selector(store.getState()),
-	)
-}
-
 function isPiece(piece: string): piece is Piece {
 	return PIECES.includes(piece)
+}
+
+function shallow<T extends readonly unknown[]>(a: T, b: T) {
+	if (Object.is(a, b)) return true
+	if (a.length !== b.length) return false
+
+	for (let i = 0; i < a.length; ++i) {
+		if (!Object.is(a[i], b[i])) return false
+	}
+	return true
 }
 
 if (import.meta.vitest) {

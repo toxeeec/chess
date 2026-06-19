@@ -4,7 +4,7 @@ import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { createContext, use, useRef, useState, useSyncExternalStore } from "react"
 
 import { clsx } from "./clsx"
-import { useGameStore, type Piece } from "./game-store"
+import { useGameStore, useShallow, type Piece } from "./game-store"
 import type { Move } from "./use-live-room"
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
@@ -81,11 +81,13 @@ const Square = {
 }
 
 function BoardSquare({ square }: { square: number }) {
-	const piece = useGameStore((store) => store.board[square])
-	const isLegalMoveTarget = useGameStore((store) =>
-		store.legalMoves.some(({ to }) => to === square),
+	const [piece, isLegalMoveTarget, disabled] = useGameStore(
+		useShallow((store) => [
+			store.board[square],
+			store.legalMoves.some(({ to }) => to === square),
+			!store.legalMoves.some(({ from }) => from === square),
+		]),
 	)
-	const disabled = useGameStore((store) => !store.legalMoves.some(({ from }) => from === square))
 	const { isDropTarget, ref } = useDroppable({
 		id: square,
 	})

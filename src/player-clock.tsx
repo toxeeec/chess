@@ -1,23 +1,33 @@
 import { useEffect, useState } from "react"
 
 import { clsx } from "./clsx"
-import { useGameStore } from "./game-store"
+import { useGameStore, useShallow } from "./game-store"
 import type { Player } from "./room"
 
 export function PlayerClock({ player }: { player: Player }) {
-	const active = useGameStore((store) => store.clock.running && store.turn === player)
-	const remainingMs = useGameStore((store) =>
-		player === "white" ? store.clock.whiteRemainingMs : store.clock.blackRemainingMs,
+	const [active, remainingMs, receivedAtMs] = useGameStore(
+		useShallow((store) => [
+			store.clock.running && store.turn === player,
+			player === "white" ? store.clock.whiteRemainingMs : store.clock.blackRemainingMs,
+			store.clock.receivedAtMs,
+		]),
 	)
 
 	if (active) {
-		return <ActiveClock player={player} remainingMs={remainingMs} />
+		return <ActiveClock player={player} remainingMs={remainingMs} receivedAtMs={receivedAtMs} />
 	}
 	return <ClockDisplay active={false} player={player} remainingMs={remainingMs} />
 }
 
-function ActiveClock({ player, remainingMs }: { player: Player; remainingMs: number }) {
-	const receivedAtMs = useGameStore((store) => store.clock.receivedAtMs)
+function ActiveClock({
+	player,
+	remainingMs,
+	receivedAtMs,
+}: {
+	player: Player
+	remainingMs: number
+	receivedAtMs: number
+}) {
 	const [now, setNow] = useState(() => Date.now())
 
 	useEffect(() => {
