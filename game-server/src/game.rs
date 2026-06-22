@@ -4,6 +4,7 @@ use std::marker::ConstParamTy;
 
 use crate::{
     board::Board,
+    king::add_king_moves,
     knight::add_knight_moves,
     moves::{Move, MoveList},
     pawn::add_pawn_moves,
@@ -106,10 +107,12 @@ impl Game {
             Color::White => {
                 add_pawn_moves::<{ Color::White }>(&self.board, &mut self.moves);
                 add_knight_moves::<{ Color::White }>(&self.board, &mut self.moves);
+                add_king_moves::<{ Color::White }>(&self.board, &mut self.moves);
             }
             Color::Black => {
                 add_pawn_moves::<{ Color::Black }>(&self.board, &mut self.moves);
                 add_knight_moves::<{ Color::Black }>(&self.board, &mut self.moves);
+                add_king_moves::<{ Color::Black }>(&self.board, &mut self.moves);
             }
         }
     }

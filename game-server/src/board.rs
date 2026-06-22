@@ -122,6 +122,13 @@ impl Board {
         }
     }
 
+    pub(super) const fn king<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_king,
+            Color::Black => self.black_king,
+        }
+    }
+
     pub(super) const fn occupancy<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => {

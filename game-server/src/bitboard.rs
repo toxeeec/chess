@@ -9,13 +9,16 @@ use crate::{game::Color, square::Square};
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Bitboard(u64);
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, ConstParamTy, Eq, PartialEq)]
 pub(super) enum Direction {
     North,
     South,
     East,
     West,
+    Northeast,
+    Northwest,
+    Southeast,
+    Southwest,
     Nne,
     Nnw,
     Nee,
@@ -66,6 +69,10 @@ impl Bitboard {
             Direction::South => self >> 8,
             Direction::East => (self & !Self::FILE_H) << 1,
             Direction::West => (self & !Self::FILE_A) >> 1,
+            Direction::Northeast => (self & !Self::FILE_H) << 9,
+            Direction::Northwest => (self & !Self::FILE_A) << 7,
+            Direction::Southeast => (self & !Self::FILE_H) >> 7,
+            Direction::Southwest => (self & !Self::FILE_A) >> 9,
             Direction::Nne => (self & !Self::FILE_H) << 17,
             Direction::Nnw => (self & !Self::FILE_A) << 15,
             Direction::Nee => (self & !(Self::FILE_G | Self::FILE_H)) << 10,

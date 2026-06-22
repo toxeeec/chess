@@ -11,6 +11,7 @@ mod board;
 mod game;
 mod game_state;
 mod game_storage;
+mod king;
 mod knight;
 mod moves;
 mod pawn;
