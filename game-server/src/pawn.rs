@@ -1,20 +1,20 @@
 use crate::{
     bitboard::Bitboard,
     board::Board,
+    game::Color,
     moves::{Move, MoveList},
-    square::Square,
 };
 
-pub(super) fn add_pawn_moves<const IS_WHITE: bool>(board: &Board, list: &mut MoveList) {
+pub(super) fn add_pawn_moves<const COLOR: Color>(board: &Board, list: &mut MoveList) {
     let empty = board.empty();
-    let pawns = board.pawns::<IS_WHITE>();
+    let pawns = board.pawns::<COLOR>();
 
     let single_pushes =
-        ((pawns & !Bitboard::relative_rank::<IS_WHITE>(7)).forward::<IS_WHITE>(1)) & empty;
+        ((pawns & !Bitboard::relative_rank::<COLOR>(7)).forward::<COLOR, 1>()) & empty;
     let double_pushes =
-        ((single_pushes & Bitboard::relative_rank::<IS_WHITE>(3)).forward::<IS_WHITE>(1)) & empty;
+        ((single_pushes & Bitboard::relative_rank::<COLOR>(3)).forward::<COLOR, 1>()) & empty;
 
     list.reserve(single_pushes.len() + double_pushes.len());
-    list.extend(single_pushes.map(|to| Move::new(Square::backward::<IS_WHITE>(to, 1), to)));
-    list.extend(double_pushes.map(|to| Move::new(Square::backward::<IS_WHITE>(to, 2), to)));
+    list.extend(single_pushes.map(|to| Move::new(to.backward::<COLOR, 1>(), to)));
+    list.extend(double_pushes.map(|to| Move::new(to.backward::<COLOR, 2>(), to)));
 }

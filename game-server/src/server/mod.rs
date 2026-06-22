@@ -15,7 +15,7 @@ use worker::{
 };
 
 use crate::{
-    game::{Game, Player},
+    game::{Color, Game},
     game_state::{GameState, PlayerConnected, StateChange},
     game_storage::GameStorage,
     moves::Move,
@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-const PLAYER_HEADER: &str = "Player-Color";
+const COLOR_HEADER: &str = "Player-Color";
 
 #[durable_object]
 pub struct GameServer {
@@ -82,9 +82,9 @@ impl DurableObject for GameServer {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
-        let player = match req.headers().get(PLAYER_HEADER)?.as_deref() {
-            Some("white") => Player::White,
-            Some("black") => Player::Black,
+        let color = match req.headers().get(COLOR_HEADER)?.as_deref() {
+            Some("white") => Color::White,
+            Some("black") => Color::Black,
             _ => return Response::error("Forbidden", 403),
         };
 
@@ -95,11 +95,11 @@ impl DurableObject for GameServer {
         };
 
         let pair = WebSocketPair::new()?;
-        pair.server.serialize_attachment(player)?;
+        pair.server.serialize_attachment(color)?;
         self.durable_state.accept_web_socket(&pair.server);
         pair.server.send(&ServerMessage::Snapshot(snapshot))?;
 
-        self.handle_player_connected(player).await?;
+        self.handle_player_connected(color).await?;
         Response::from_websocket(pair.client)
     }
 
@@ -125,7 +125,7 @@ impl DurableObject for GameServer {
             return Ok(());
         };
 
-        let Some(player) = ws.deserialize_attachment::<Player>()? else {
+        let Some(color) = ws.deserialize_attachment::<Color>()? else {
             ws.send(&ServerMessage::Error(ErrorMessage::InvalidPlayer))?;
             return Ok(());
         };
@@ -149,7 +149,7 @@ impl DurableObject for GameServer {
                 return Ok(());
             }
 
-            if let Err(error) = state.make_move(player, mve, now) {
+            if let Err(error) = state.make_move(color, mve, now) {
                 ws.send(&ServerMessage::Error(error.into()))?;
                 return Ok(());
             }
@@ -175,11 +175,11 @@ impl DurableObject for GameServer {
         _reason: String,
         _was_clean: bool,
     ) -> Result<()> {
-        let Some(player) = ws.deserialize_attachment::<Player>()? else {
+        let Some(color) = ws.deserialize_attachment::<Color>()? else {
             return Ok(());
         };
 
-        self.handle_player_disconnected(player).await?;
+        self.handle_player_disconnected(color).await?;
         Ok(())
     }
 }
@@ -205,15 +205,15 @@ impl GameServer {
         Ok(())
     }
 
-    async fn handle_player_connected(&self, player: Player) -> Result<()> {
-        let is_white_connected = self.is_player_connected(Player::White)?;
-        let is_black_connected = self.is_player_connected(Player::Black)?;
+    async fn handle_player_connected(&self, color: Color) -> Result<()> {
+        let is_white_connected = self.is_player_connected(Color::White)?;
+        let is_black_connected = self.is_player_connected(Color::Black)?;
 
         {
             let now = Date::now() as i64;
             let mut state = self.state_mut()?;
             let change = state.player_connected(PlayerConnected {
-                player,
+                color,
                 now,
                 is_white_connected,
                 is_black_connected,
@@ -225,15 +225,15 @@ impl GameServer {
         Ok(())
     }
 
-    async fn handle_player_disconnected(&self, player: Player) -> Result<()> {
-        if self.is_player_connected(player)? {
+    async fn handle_player_disconnected(&self, color: Color) -> Result<()> {
+        if self.is_player_connected(color)? {
             return Ok(());
         }
 
         {
             let now = Date::now() as i64;
             let mut state = self.state_mut()?;
-            let change = state.player_disconnected(player, now);
+            let change = state.player_disconnected(color, now);
             self.handle_state_change(&state, change, now)?;
         }
 
@@ -275,9 +275,9 @@ impl GameServer {
         Ok(())
     }
 
-    fn is_player_connected(&self, player: Player) -> Result<bool> {
+    fn is_player_connected(&self, color: Color) -> Result<bool> {
         for socket in self.durable_state.get_websockets() {
-            if socket.deserialize_attachment::<Player>()? == Some(player) {
+            if socket.deserialize_attachment::<Color>()? == Some(color) {
                 return Ok(true);
             }
         }

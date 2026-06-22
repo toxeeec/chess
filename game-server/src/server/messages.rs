@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::{
-    game::{Game, Player},
+    game::{Color, Game},
     game_state::{GameLifecycle, GameState, MakeMoveError},
     moves::Move,
 };
@@ -55,7 +55,7 @@ pub(super) struct MoveMessage {
     revision: u32,
     #[serde(rename = "move")]
     mve: String,
-    turn: Player,
+    turn: Color,
     legal_moves: String,
     clock: Clock,
 }
@@ -132,7 +132,7 @@ impl Clock {
         debug_assert!(now >= turn_started_at);
         let elapsed_ms = (now - turn_started_at) as i32;
         match state.game.turn {
-            Player::White => Self {
+            Color::White => Self {
                 white_remaining_ms: state
                     .clock
                     .white_remaining_ms
@@ -141,7 +141,7 @@ impl Clock {
                 black_remaining_ms: state.clock.black_remaining_ms,
                 running: true,
             },
-            Player::Black => Self {
+            Color::Black => Self {
                 white_remaining_ms: state.clock.white_remaining_ms,
                 black_remaining_ms: state
                     .clock
@@ -264,7 +264,7 @@ mod tests {
         let state = GameState {
             game: Game::new(
                 Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR").unwrap(),
-                Player::Black,
+                Color::Black,
             ),
             revision: 1,
             timeouts: TEST_TIMEOUTS,
@@ -291,7 +291,7 @@ mod tests {
         let state = GameState {
             game: Game::new(
                 Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR").unwrap(),
-                Player::Black,
+                Color::Black,
             ),
             revision: 1,
             timeouts: TEST_TIMEOUTS,

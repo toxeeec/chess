@@ -1,20 +1,22 @@
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use std::marker::ConstParamTy;
 
 use crate::{
     board::Board,
+    knight::add_knight_moves,
     moves::{Move, MoveList},
     pawn::add_pawn_moves,
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Copy, ConstParamTy, Debug, Deserialize, Eq, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum Player {
+pub(super) enum Color {
     White,
     Black,
 }
 
-impl Player {
+impl Color {
     pub(super) const fn opponent(self) -> Self {
         match self {
             Self::White => Self::Black,
@@ -45,18 +47,18 @@ pub(super) enum MakeMoveError {
 
 pub(super) struct Game {
     pub(super) board: Board,
-    pub(super) turn: Player,
+    pub(super) turn: Color,
     pub(super) moves: MoveList,
 }
 
 impl Default for Game {
     fn default() -> Self {
-        Self::new(Board::default(), Player::White)
+        Self::new(Board::default(), Color::White)
     }
 }
 
 impl Game {
-    pub(super) fn new(board: Board, turn: Player) -> Self {
+    pub(super) fn new(board: Board, turn: Color) -> Self {
         let mut game = Self {
             board,
             turn,
@@ -73,7 +75,7 @@ impl Game {
         let active_color = fields.next().context("FEN must contain active color")?;
         Ok(Self::new(
             Board::from_fen(placement)?,
-            Player::from_fen_value(active_color)?,
+            Color::from_fen_value(active_color)?,
         ))
     }
 
@@ -81,8 +83,8 @@ impl Game {
         format!("{} {} - - 0 1", self.board.fen(), self.turn.fen_value())
     }
 
-    pub(super) fn make_move(&mut self, player: Player, mve: Move) -> Result<(), MakeMoveError> {
-        if player != self.turn {
+    pub(super) fn make_move(&mut self, color: Color, mve: Move) -> Result<(), MakeMoveError> {
+        if color != self.turn {
             return Err(MakeMoveError::NotYourTurn);
         }
 
@@ -101,11 +103,13 @@ impl Game {
 
     fn add_moves(&mut self) {
         match self.turn {
-            Player::White => {
-                add_pawn_moves::<true>(&self.board, &mut self.moves);
+            Color::White => {
+                add_pawn_moves::<{ Color::White }>(&self.board, &mut self.moves);
+                add_knight_moves::<{ Color::White }>(&self.board, &mut self.moves);
             }
-            Player::Black => {
-                add_pawn_moves::<false>(&self.board, &mut self.moves);
+            Color::Black => {
+                add_pawn_moves::<{ Color::Black }>(&self.board, &mut self.moves);
+                add_knight_moves::<{ Color::Black }>(&self.board, &mut self.moves);
             }
         }
     }
@@ -117,16 +121,16 @@ mod tests {
 
     use crate::moves::Move;
 
-    use super::{Game, Player};
+    use super::{Color, Game};
 
     #[test]
     fn parses_white_and_black_active_color() {
         let white = Game::from_fen("8/8/8/8/8/8/4P3/8 w - - 0 1").unwrap();
         let black = Game::from_fen("8/3p4/8/8/8/8/8/8 b - - 0 1").unwrap();
 
-        assert_eq!(white.turn, Player::White);
+        assert_eq!(white.turn, Color::White);
         assert_eq!(white.fen(), "8/8/8/8/8/8/4P3/8 w - - 0 1");
-        assert_eq!(black.turn, Player::Black);
+        assert_eq!(black.turn, Color::Black);
         assert_eq!(black.fen(), "8/3p4/8/8/8/8/8/8 b - - 0 1");
     }
 
@@ -146,9 +150,9 @@ mod tests {
     fn legal_move_updates_board_turn_and_move_count() {
         let mut game = Game::default();
 
-        assert_eq!(game.moves.len(), 16);
+        assert_eq!(game.moves.len(), 20);
         assert!(
-            game.make_move(Player::White, Move::from_str("e2e3").unwrap())
+            game.make_move(Color::White, Move::from_str("e2e3").unwrap())
                 .is_ok()
         );
 
@@ -156,8 +160,8 @@ mod tests {
             game.fen(),
             "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1"
         );
-        assert_eq!(game.turn, Player::Black);
-        assert_eq!(game.moves.len(), 16);
+        assert_eq!(game.turn, Color::Black);
+        assert_eq!(game.moves.len(), 20);
     }
 
     #[test]
@@ -166,11 +170,11 @@ mod tests {
         let move_count = game.moves.len();
 
         assert!(
-            game.make_move(Player::Black, Move::from_str("a7a6").unwrap())
+            game.make_move(Color::Black, Move::from_str("a7a6").unwrap())
                 .is_err()
         );
 
-        assert_eq!(game.turn, Player::White);
+        assert_eq!(game.turn, Color::White);
         assert_eq!(game.moves.len(), move_count);
     }
 
@@ -180,11 +184,11 @@ mod tests {
         let move_count = game.moves.len();
 
         assert!(
-            game.make_move(Player::White, Move::from_str("e2e5").unwrap())
+            game.make_move(Color::White, Move::from_str("e2e5").unwrap())
                 .is_err()
         );
 
-        assert_eq!(game.turn, Player::White);
+        assert_eq!(game.turn, Color::White);
         assert_eq!(game.moves.len(), move_count);
     }
 }

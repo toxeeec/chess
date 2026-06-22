@@ -1,3 +1,5 @@
+use crate::game::Color;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Square(pub(super) u32);
 
@@ -7,11 +9,10 @@ impl Square {
         Self(square)
     }
 
-    pub(super) const fn backward<const IS_WHITE: bool>(self, n: u32) -> Self {
-        if IS_WHITE {
-            Square::new(self.0 - n * 8)
-        } else {
-            Square::new(self.0 + n * 8)
+    pub(super) const fn backward<const COLOR: Color, const N: u32>(self) -> Self {
+        match COLOR {
+            Color::White => Square::new(self.0 - N * 8),
+            Color::Black => Square::new(self.0 + N * 8),
         }
     }
 }

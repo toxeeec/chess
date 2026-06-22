@@ -1,42 +1,100 @@
 use std::{
     fmt,
+    marker::ConstParamTy,
     ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr},
 };
 
-use crate::square::Square;
+use crate::{game::Color, square::Square};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Bitboard(u64);
 
+#[allow(dead_code)]
+#[derive(Clone, Copy, ConstParamTy, Eq, PartialEq)]
+pub(super) enum Direction {
+    North,
+    South,
+    East,
+    West,
+    Nne,
+    Nnw,
+    Nee,
+    Nww,
+    Sse,
+    Ssw,
+    See,
+    Sww,
+}
+
 #[macro_export]
 macro_rules! bitboard {
-    ($square: expr) => {
-        $crate::bitboard::Bitboard::from($crate::square::Square::new($square))
-    };
+    ($square: expr) => {{
+        let square = $square;
+        debug_assert!((0..64).contains(&square));
+        $crate::bitboard::Bitboard::from($crate::square::Square::new(square as u32))
+    }};
 
     ($($square: expr),* $(,)?) => {
-        $crate::bitboard::Bitboard::from([$($crate::square::Square::new($square),)*])
+        $crate::bitboard::Bitboard::from([$({
+            debug_assert!((0..64).contains(&$square));
+            $crate::square::Square::new($square as u32)
+        },)*])
     };
 }
 
 impl Bitboard {
     pub(super) const EMPTY: Self = Self(0);
+    pub(super) const FILE_A: Self = Self(0x0101010101010101);
+    pub(super) const FILE_B: Self = Self::FILE_A << 1;
+    pub(super) const FILE_G: Self = Self::FILE_A << 6;
+    pub(super) const FILE_H: Self = Self::FILE_A << 7;
 
     pub(super) fn empty(self) -> bool {
         self == Self::EMPTY
     }
 
-    pub(super) fn forward<const IS_WHITE: bool>(self, n: u32) -> Self {
-        if IS_WHITE {
-            self << (n * 8)
-        } else {
-            self >> (n * 8)
+    pub(super) fn forward<const COLOR: Color, const N: u32>(self) -> Self {
+        match COLOR {
+            Color::White => self.shift_n::<{ Direction::North }, N>(),
+            Color::Black => self.shift_n::<{ Direction::South }, N>(),
         }
     }
 
-    pub(super) const fn relative_rank<const IS_WHITE: bool>(n: u32) -> Self {
+    pub(super) const fn shift<const DIRECTION: Direction>(self) -> Self {
+        match DIRECTION {
+            Direction::North => self << 8,
+            Direction::South => self >> 8,
+            Direction::East => (self & !Self::FILE_H) << 1,
+            Direction::West => (self & !Self::FILE_A) >> 1,
+            Direction::Nne => (self & !Self::FILE_H) << 17,
+            Direction::Nnw => (self & !Self::FILE_A) << 15,
+            Direction::Nee => (self & !(Self::FILE_G | Self::FILE_H)) << 10,
+            Direction::Nww => (self & !(Self::FILE_A | Self::FILE_B)) << 6,
+            Direction::Sse => (self & !Self::FILE_H) >> 15,
+            Direction::Ssw => (self & !Self::FILE_A) >> 17,
+            Direction::See => (self & !(Self::FILE_G | Self::FILE_H)) >> 6,
+            Direction::Sww => (self & !(Self::FILE_A | Self::FILE_B)) >> 10,
+        }
+    }
+
+    const fn shift_n<const DIRECTION: Direction, const N: u32>(self) -> Self {
+        let mut bitboard = self;
+        let mut i = 0;
+
+        while i < N {
+            bitboard = bitboard.shift::<DIRECTION>();
+            i += 1;
+        }
+
+        bitboard
+    }
+
+    pub(super) const fn relative_rank<const COLOR: Color>(n: u32) -> Self {
         debug_assert!(n >= 1 && n <= 8);
-        let rank = if IS_WHITE { n } else { 9 - n };
+        let rank = match COLOR {
+            Color::White => n,
+            Color::Black => 9 - n,
+        };
         Self(0xff << ((rank - 1) * 8))
     }
 
@@ -54,7 +112,7 @@ impl Bitboard {
     }
 }
 
-impl From<Square> for Bitboard {
+const impl From<Square> for Bitboard {
     fn from(square: Square) -> Self {
         Self(1 << square.0)
     }
@@ -93,35 +151,35 @@ impl fmt::Debug for Bitboard {
     }
 }
 
-impl BitAnd for Bitboard {
+const impl BitAnd for Bitboard {
     type Output = Self;
     fn bitand(self, rhs: Self) -> Self::Output {
         Self(self.0 & rhs.0)
     }
 }
 
-impl BitOr for Bitboard {
+const impl BitOr for Bitboard {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
         Self(self.0 | rhs.0)
     }
 }
 
-impl Not for Bitboard {
+const impl Not for Bitboard {
     type Output = Self;
     fn not(self) -> Self::Output {
         Self(!self.0)
     }
 }
 
-impl Shl<u32> for Bitboard {
+const impl Shl<u32> for Bitboard {
     type Output = Self;
     fn shl(self, rhs: u32) -> Self::Output {
         Self(self.0 << rhs)
     }
 }
 
-impl Shr<u32> for Bitboard {
+const impl Shr<u32> for Bitboard {
     type Output = Self;
     fn shr(self, rhs: u32) -> Self::Output {
         Self(self.0 >> rhs)

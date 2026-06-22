@@ -1,5 +1,5 @@
 use crate::{
-    game::{Game, MakeMoveError as GameMakeMoveError, Player},
+    game::{Color, Game, MakeMoveError as GameMakeMoveError},
     moves::{Move, MoveList},
 };
 use std::fmt;
@@ -39,7 +39,7 @@ pub(crate) struct GameState {
 }
 
 pub(crate) struct PlayerConnected {
-    pub(crate) player: Player,
+    pub(crate) color: Color,
     pub(crate) now: i64,
     pub(crate) is_white_connected: bool,
     pub(crate) is_black_connected: bool,
@@ -116,8 +116,8 @@ impl GameState {
                 white_disconnected_at,
                 black_disconnected_at,
                 ..
-            } => match event.player {
-                Player::White => {
+            } => match event.color {
+                Color::White => {
                     if white_disconnected_at.is_none() {
                         StateChange::Unchanged
                     } else {
@@ -125,7 +125,7 @@ impl GameState {
                         StateChange::Updated
                     }
                 }
-                Player::Black => {
+                Color::Black => {
                     if black_disconnected_at.is_none() {
                         StateChange::Unchanged
                     } else {
@@ -138,7 +138,7 @@ impl GameState {
         }
     }
 
-    pub(super) fn player_disconnected(&mut self, player: Player, now: i64) -> StateChange {
+    pub(super) fn player_disconnected(&mut self, color: Color, now: i64) -> StateChange {
         let GameLifecycle::Active {
             turn_started_at,
             white_disconnected_at,
@@ -150,9 +150,9 @@ impl GameState {
         };
 
         debug_assert!(now >= *turn_started_at);
-        let disconnected_at = match player {
-            Player::White => white_disconnected_at,
-            Player::Black => black_disconnected_at,
+        let disconnected_at = match color {
+            Color::White => white_disconnected_at,
+            Color::Black => black_disconnected_at,
         };
 
         if disconnected_at.is_some() {
@@ -252,7 +252,7 @@ impl GameState {
 
     pub(super) fn make_move(
         &mut self,
-        player: Player,
+        color: Color,
         mve: Move,
         now: i64,
     ) -> Result<(), MakeMoveError> {
@@ -261,15 +261,15 @@ impl GameState {
         };
         debug_assert!(now >= turn_started_at);
 
-        let moving_player = self.game.turn;
+        let moving_color = self.game.turn;
         self.game
-            .make_move(player, mve)
+            .make_move(color, mve)
             .map_err(MakeMoveError::from)?;
 
         if self.revision > 0 {
             let elapsed_ms = (now - turn_started_at) as i32;
-            *self.remaining_ms_mut(moving_player) = self
-                .remaining_ms(moving_player)
+            *self.remaining_ms_mut(moving_color) = self
+                .remaining_ms(moving_color)
                 .saturating_sub(elapsed_ms)
                 .max(0);
         }
@@ -289,17 +289,17 @@ impl GameState {
         turn_started_at + self.remaining_ms(self.game.turn) as i64
     }
 
-    const fn remaining_ms(&self, player: Player) -> i32 {
-        match player {
-            Player::White => self.clock.white_remaining_ms,
-            Player::Black => self.clock.black_remaining_ms,
+    const fn remaining_ms(&self, color: Color) -> i32 {
+        match color {
+            Color::White => self.clock.white_remaining_ms,
+            Color::Black => self.clock.black_remaining_ms,
         }
     }
 
-    fn remaining_ms_mut(&mut self, player: Player) -> &mut i32 {
-        match player {
-            Player::White => &mut self.clock.white_remaining_ms,
-            Player::Black => &mut self.clock.black_remaining_ms,
+    fn remaining_ms_mut(&mut self, color: Color) -> &mut i32 {
+        match color {
+            Color::White => &mut self.clock.white_remaining_ms,
+            Color::Black => &mut self.clock.black_remaining_ms,
         }
     }
 
@@ -368,7 +368,7 @@ mod tests {
             game: Game::new(
                 crate::board::Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR")
                     .unwrap(),
-                Player::Black,
+                Color::Black,
             ),
             revision: 1,
             lifecycle: active_lifecycle(NOW),
@@ -382,7 +382,7 @@ mod tests {
 
         assert_eq!(
             state.player_connected(PlayerConnected {
-                player: Player::Black,
+                color: Color::Black,
                 now: NOW,
                 is_white_connected: true,
                 is_black_connected: true,
@@ -450,13 +450,13 @@ mod tests {
         };
 
         state
-            .make_move(Player::White, Move::from_str("e2e3").unwrap(), NOW + 125)
+            .make_move(Color::White, Move::from_str("e2e3").unwrap(), NOW + 125)
             .unwrap();
 
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.clock.black_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.turn_started_at(), Some(NOW + 125));
-        assert_eq!(state.game.turn, Player::Black);
+        assert_eq!(state.game.turn, Color::Black);
     }
 
     #[test]
@@ -479,13 +479,13 @@ mod tests {
         let mut state = after_white_move_state();
 
         state
-            .make_move(Player::Black, Move::from_str("a7a6").unwrap(), NOW + 125)
+            .make_move(Color::Black, Move::from_str("a7a6").unwrap(), NOW + 125)
             .unwrap();
 
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.clock.black_remaining_ms, TIME_CONTROL_MS - 125);
         assert_eq!(state.turn_started_at(), Some(NOW + 125));
-        assert_eq!(state.game.turn, Player::White);
+        assert_eq!(state.game.turn, Color::White);
     }
 
     #[test]
@@ -609,12 +609,12 @@ mod tests {
         };
 
         assert_eq!(
-            state.player_disconnected(Player::White, NOW),
+            state.player_disconnected(Color::White, NOW),
             StateChange::Updated
         );
         assert_eq!(state.white_disconnected_at(), Some(NOW));
         assert_eq!(
-            state.player_disconnected(Player::White, NOW + 1),
+            state.player_disconnected(Color::White, NOW + 1),
             StateChange::Unchanged
         );
         assert_eq!(state.white_disconnected_at(), Some(NOW));
@@ -634,7 +634,7 @@ mod tests {
 
         assert_eq!(
             state.player_connected(PlayerConnected {
-                player: Player::White,
+                color: Color::White,
                 now: NOW,
                 is_white_connected: true,
                 is_black_connected: true,
@@ -659,7 +659,7 @@ mod tests {
             };
 
             assert!(matches!(
-                state.make_move(Player::White, Move::from_str("e2e3").unwrap(), NOW),
+                state.make_move(Color::White, Move::from_str("e2e3").unwrap(), NOW),
                 Err(MakeMoveError::GameNotActive)
             ));
             assert_eq!(state.revision, 0);

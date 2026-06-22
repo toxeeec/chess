@@ -2,7 +2,7 @@ use std::fmt;
 
 use anyhow::{Result, bail};
 
-use crate::{bitboard, bitboard::Bitboard, moves::Move, square::Square};
+use crate::{bitboard, bitboard::Bitboard, game::Color, moves::Move, square::Square};
 
 pub(super) struct Board {
     white_pawns: Bitboard,
@@ -108,11 +108,38 @@ impl Board {
         !self.occupied()
     }
 
-    pub(super) const fn pawns<const IS_WHITE: bool>(&self) -> Bitboard {
-        if IS_WHITE {
-            self.white_pawns
-        } else {
-            self.black_pawns
+    pub(super) const fn pawns<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_pawns,
+            Color::Black => self.black_pawns,
+        }
+    }
+
+    pub(super) const fn knights<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_knights,
+            Color::Black => self.black_knights,
+        }
+    }
+
+    pub(super) const fn occupancy<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => {
+                self.white_pawns
+                    | self.white_rooks
+                    | self.white_knights
+                    | self.white_bishops
+                    | self.white_queens
+                    | self.white_king
+            }
+            Color::Black => {
+                self.black_pawns
+                    | self.black_rooks
+                    | self.black_knights
+                    | self.black_bishops
+                    | self.black_queens
+                    | self.black_king
+            }
         }
     }
 
@@ -155,19 +182,8 @@ impl Board {
         fen
     }
 
-    fn occupied(&self) -> Bitboard {
-        self.white_pawns
-            | self.white_rooks
-            | self.white_knights
-            | self.white_bishops
-            | self.white_queens
-            | self.white_king
-            | self.black_pawns
-            | self.black_rooks
-            | self.black_knights
-            | self.black_bishops
-            | self.black_queens
-            | self.black_king
+    const fn occupied(&self) -> Bitboard {
+        self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }
 
     fn for_each_bb_mut(&mut self, mut f: impl FnMut(&mut Bitboard)) {
