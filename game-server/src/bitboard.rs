@@ -7,7 +7,7 @@ use std::{
 use crate::{game::Color, square::Square};
 
 #[derive(Clone, Copy, PartialEq)]
-pub(super) struct Bitboard(u64);
+pub(super) struct Bitboard(pub(super) u64);
 
 #[derive(Clone, Copy, ConstParamTy, Eq, PartialEq)]
 pub(super) enum Direction {
@@ -54,6 +54,10 @@ impl Bitboard {
 
     pub(super) fn empty(self) -> bool {
         self == Self::EMPTY
+    }
+
+    pub(super) const fn new(value: u64) -> Self {
+        Self(value)
     }
 
     pub(super) fn forward<const COLOR: Color, const N: u32>(self) -> Self {

@@ -9,29 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as RoomIdRouteImport } from './routes/$roomId'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RoomIdWsRouteImport } from './routes/$roomId.ws'
+import { Route as RoomIdRouteImport } from './routes/$roomId'
 import { Route as RoomIdInviteRouteImport } from './routes/$roomId.invite'
+import { Route as RoomIdWsRouteImport } from './routes/$roomId.ws'
 
-const RoomIdRoute = RoomIdRouteImport.update({
-  id: '/$roomId',
-  path: '/$roomId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoomIdWsRoute = RoomIdWsRouteImport.update({
-  id: '/ws',
-  path: '/ws',
-  getParentRoute: () => RoomIdRoute,
+const RoomIdRoute = RoomIdRouteImport.update({
+  id: '/$roomId',
+  path: '/$roomId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const RoomIdInviteRoute = RoomIdInviteRouteImport.update({
   id: '/invite',
   path: '/invite',
+  getParentRoute: () => RoomIdRoute,
+} as any)
+const RoomIdWsRoute = RoomIdWsRouteImport.update({
+  id: '/ws',
+  path: '/ws',
   getParentRoute: () => RoomIdRoute,
 } as any)
 
@@ -69,13 +69,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/$roomId': {
-      id: '/$roomId'
-      path: '/$roomId'
-      fullPath: '/$roomId'
-      preLoaderRoute: typeof RoomIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -83,18 +76,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$roomId/ws': {
-      id: '/$roomId/ws'
-      path: '/ws'
-      fullPath: '/$roomId/ws'
-      preLoaderRoute: typeof RoomIdWsRouteImport
-      parentRoute: typeof RoomIdRoute
+    '/$roomId': {
+      id: '/$roomId'
+      path: '/$roomId'
+      fullPath: '/$roomId'
+      preLoaderRoute: typeof RoomIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/$roomId/invite': {
       id: '/$roomId/invite'
       path: '/invite'
       fullPath: '/$roomId/invite'
       preLoaderRoute: typeof RoomIdInviteRouteImport
+      parentRoute: typeof RoomIdRoute
+    }
+    '/$roomId/ws': {
+      id: '/$roomId/ws'
+      path: '/ws'
+      fullPath: '/$roomId/ws'
+      preLoaderRoute: typeof RoomIdWsRouteImport
       parentRoute: typeof RoomIdRoute
     }
   }

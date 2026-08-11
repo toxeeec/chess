@@ -3,11 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::marker::ConstParamTy;
 
 use crate::{
+    bishop::add_bishop_moves,
     board::Board,
     king::add_king_moves,
     knight::add_knight_moves,
     moves::{Move, MoveList},
     pawn::add_pawn_moves,
+    queen::add_queen_moves,
+    rook::add_rook_moves,
 };
 
 #[derive(Clone, Copy, ConstParamTy, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -103,16 +106,27 @@ impl Game {
     }
 
     fn add_moves(&mut self) {
+        let occ = self.board.occupied();
+        let empty = !occ;
+
         match self.turn {
             Color::White => {
-                add_pawn_moves::<{ Color::White }>(&self.board, &mut self.moves);
-                add_knight_moves::<{ Color::White }>(&self.board, &mut self.moves);
-                add_king_moves::<{ Color::White }>(&self.board, &mut self.moves);
+                let blockers = self.board.occupancy::<{ Color::White }>();
+                add_pawn_moves::<{ Color::White }>(&self.board, empty, &mut self.moves);
+                add_knight_moves::<{ Color::White }>(&self.board, blockers, &mut self.moves);
+                add_rook_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
+                add_bishop_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
+                add_queen_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
+                add_king_moves::<{ Color::White }>(&self.board, blockers, &mut self.moves);
             }
             Color::Black => {
-                add_pawn_moves::<{ Color::Black }>(&self.board, &mut self.moves);
-                add_knight_moves::<{ Color::Black }>(&self.board, &mut self.moves);
-                add_king_moves::<{ Color::Black }>(&self.board, &mut self.moves);
+                let blockers = self.board.occupancy::<{ Color::Black }>();
+                add_pawn_moves::<{ Color::Black }>(&self.board, empty, &mut self.moves);
+                add_knight_moves::<{ Color::Black }>(&self.board, blockers, &mut self.moves);
+                add_rook_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
+                add_bishop_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
+                add_queen_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
+                add_king_moves::<{ Color::Black }>(&self.board, blockers, &mut self.moves);
             }
         }
     }
@@ -120,21 +134,17 @@ impl Game {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use crate::moves::Move;
-
     use super::{Color, Game};
 
     #[test]
     fn parses_white_and_black_active_color() {
-        let white = Game::from_fen("8/8/8/8/8/8/4P3/8 w - - 0 1").unwrap();
-        let black = Game::from_fen("8/3p4/8/8/8/8/8/8 b - - 0 1").unwrap();
+        let white = Game::from_fen("7k/8/8/8/8/8/4P3/4K3 w - - 0 1").unwrap();
+        let black = Game::from_fen("7k/3p4/8/8/8/8/8/4K3 b - - 0 1").unwrap();
 
         assert_eq!(white.turn, Color::White);
-        assert_eq!(white.fen(), "8/8/8/8/8/8/4P3/8 w - - 0 1");
+        assert_eq!(white.fen(), "7k/8/8/8/8/8/4P3/4K3 w - - 0 1");
         assert_eq!(black.turn, Color::Black);
-        assert_eq!(black.fen(), "8/3p4/8/8/8/8/8/8 b - - 0 1");
+        assert_eq!(black.fen(), "7k/3p4/8/8/8/8/8/4K3 b - - 0 1");
     }
 
     #[test]
@@ -155,7 +165,7 @@ mod tests {
 
         assert_eq!(game.moves.len(), 20);
         assert!(
-            game.make_move(Color::White, Move::from_str("e2e3").unwrap())
+            game.make_move(Color::White, "e2e3".parse().unwrap())
                 .is_ok()
         );
 
@@ -173,7 +183,7 @@ mod tests {
         let move_count = game.moves.len();
 
         assert!(
-            game.make_move(Color::Black, Move::from_str("a7a6").unwrap())
+            game.make_move(Color::Black, "a7a6".parse().unwrap())
                 .is_err()
         );
 
@@ -187,7 +197,7 @@ mod tests {
         let move_count = game.moves.len();
 
         assert!(
-            game.make_move(Color::White, Move::from_str("e2e5").unwrap())
+            game.make_move(Color::White, "e2e5".parse().unwrap())
                 .is_err()
         );
 

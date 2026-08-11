@@ -104,8 +104,37 @@ impl Board {
         Ok(board)
     }
 
-    pub(super) fn empty(&self) -> Bitboard {
-        !self.occupied()
+    #[cfg(test)]
+    pub(super) fn from_ascii(ascii: &str) -> Self {
+        let mut fen = String::new();
+        let squares = ascii
+            .chars()
+            .filter(|square| !square.is_whitespace())
+            .collect::<Vec<_>>();
+
+        assert_eq!(squares.len(), 64, "board must contain 64 squares");
+
+        for (index, square) in squares.into_iter().enumerate() {
+            if index > 0 && index % 8 == 0 {
+                fen.push('/');
+            }
+
+            match square {
+                '.' => match fen.pop() {
+                    Some(previous) if previous.is_ascii_digit() => {
+                        fen.push(char::from(previous as u8 + 1));
+                    }
+                    Some(previous) => {
+                        fen.push(previous);
+                        fen.push('1');
+                    }
+                    None => fen.push('1'),
+                },
+                piece => fen.push(piece),
+            }
+        }
+
+        Self::from_fen(&fen).expect("board! generated invalid FEN")
     }
 
     pub(super) const fn pawns<const COLOR: Color>(&self) -> Bitboard {
@@ -119,6 +148,27 @@ impl Board {
         match COLOR {
             Color::White => self.white_knights,
             Color::Black => self.black_knights,
+        }
+    }
+
+    pub(super) const fn rooks<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_rooks,
+            Color::Black => self.black_rooks,
+        }
+    }
+
+    pub(super) const fn bishops<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_bishops,
+            Color::Black => self.black_bishops,
+        }
+    }
+
+    pub(super) const fn queens<const COLOR: Color>(&self) -> Bitboard {
+        match COLOR {
+            Color::White => self.white_queens,
+            Color::Black => self.black_queens,
         }
     }
 
@@ -189,7 +239,7 @@ impl Board {
         fen
     }
 
-    const fn occupied(&self) -> Bitboard {
+    pub(super) const fn occupied(&self) -> Bitboard {
         self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }
 

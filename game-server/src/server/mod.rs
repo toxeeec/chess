@@ -2,10 +2,7 @@ mod messages;
 
 pub use messages::SnapshotMessage;
 
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    str::FromStr,
-};
+use std::cell::{Ref, RefCell, RefMut};
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use worker::{
@@ -18,7 +15,6 @@ use crate::{
     game::{Color, Game},
     game_state::{GameState, PlayerConnected, StateChange},
     game_storage::GameStorage,
-    moves::Move,
     server::messages::{
         ClientMessage, Clock, ErrorMessage, MoveMessage, ServerMessage, StatusMessage,
     },
@@ -134,7 +130,7 @@ impl DurableObject for GameServer {
             ws.send(&ServerMessage::Error(ErrorMessage::InvalidMessage))?;
             return Ok(());
         };
-        let Ok(mve) = Move::from_str(&mve) else {
+        let Ok(mve) = mve.parse() else {
             ws.send(&ServerMessage::Error(ErrorMessage::InvalidMoveFormat))?;
             return Ok(());
         };

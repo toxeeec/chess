@@ -6,6 +6,7 @@
     const_range
 )]
 
+mod bishop;
 mod bitboard;
 mod board;
 mod game;
@@ -13,9 +14,14 @@ mod game_state;
 mod game_storage;
 mod king;
 mod knight;
+mod magics;
 mod moves;
 mod pawn;
+mod queen;
+mod rook;
 mod server;
 mod square;
+#[cfg(test)]
+mod test_utils;
 
 pub use server::{GameServer, SnapshotMessage};

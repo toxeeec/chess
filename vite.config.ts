@@ -6,7 +6,7 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-import { gameServer } from "./vite-game-server"
+import { gameServer } from "./vite-game-server.ts"
 
 export default defineConfig({
 	define: {

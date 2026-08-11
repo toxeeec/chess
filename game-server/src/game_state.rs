@@ -326,8 +326,6 @@ impl fmt::Display for GameLifecycle {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     const NOW: i64 = 1_000;
@@ -450,7 +448,7 @@ mod tests {
         };
 
         state
-            .make_move(Color::White, Move::from_str("e2e3").unwrap(), NOW + 125)
+            .make_move(Color::White, "e2e3".parse().unwrap(), NOW + 125)
             .unwrap();
 
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
@@ -479,7 +477,7 @@ mod tests {
         let mut state = after_white_move_state();
 
         state
-            .make_move(Color::Black, Move::from_str("a7a6").unwrap(), NOW + 125)
+            .make_move(Color::Black, "a7a6".parse().unwrap(), NOW + 125)
             .unwrap();
 
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
@@ -659,7 +657,7 @@ mod tests {
             };
 
             assert!(matches!(
-                state.make_move(Color::White, Move::from_str("e2e3").unwrap(), NOW),
+                state.make_move(Color::White, "e2e3".parse().unwrap(), NOW),
                 Err(MakeMoveError::GameNotActive)
             ));
             assert_eq!(state.revision, 0);

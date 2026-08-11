@@ -24,6 +24,41 @@ impl Move {
 impl MoveList {
     pub(super) const EMPTY: &'static Self = &Self(Vec::new());
 
+    #[cfg(test)]
+    pub(super) fn from_ascii(ascii: &str) -> Self {
+        let squares = ascii
+            .chars()
+            .filter(|square| !square.is_whitespace())
+            .collect::<Vec<_>>();
+
+        assert_eq!(squares.len(), 64, "moves! must contain 64 squares");
+
+        let mut from = None;
+        let mut targets = Vec::new();
+
+        for (index, square) in squares.into_iter().enumerate() {
+            let rank = 7 - index as u32 / 8;
+            let file = index as u32 % 8;
+            let square_index = Square::new(rank * 8 + file);
+
+            match square {
+                '.' => {}
+                'o' => {
+                    assert!(
+                        from.replace(square_index).is_none(),
+                        "moves! must contain one o source"
+                    );
+                }
+                'x' => targets.push(square_index),
+                _ => panic!("invalid moves! square `{square}`; expected . o or x"),
+            }
+        }
+
+        let from = from.expect("moves! must contain one o source");
+
+        Self(targets.into_iter().map(|to| Move::new(from, to)).collect())
+    }
+
     pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
@@ -39,6 +74,11 @@ impl MoveList {
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.0.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn iter(&self) -> impl Iterator<Item = Move> + '_ {
+        self.0.iter().copied()
     }
 
     pub(crate) fn reserve(&mut self, additional: usize) {

@@ -6,9 +6,12 @@ use crate::{
     moves::{Move, MoveList},
 };
 
-pub(super) fn add_king_moves<const COLOR: Color>(board: &Board, list: &mut MoveList) {
+pub(super) fn add_king_moves<const COLOR: Color>(
+    board: &Board,
+    blockers: Bitboard,
+    list: &mut MoveList,
+) {
     let mut king = board.king::<COLOR>();
-    let blockers = board.occupancy::<COLOR>();
 
     debug_assert_eq!(king.len(), 1);
 
@@ -36,3 +39,105 @@ const KING_ATTACKS: [Bitboard; 64] = {
 
     attacks
 };
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        board::Board,
+        game::Color,
+        moves::MoveList,
+        test_utils::{MoveCase, assert_move_cases, board, moves},
+    };
+
+    use super::add_king_moves;
+
+    fn king_moves(board: Board) -> MoveList {
+        let mut moves = MoveList::default();
+
+        add_king_moves::<{ Color::White }>(
+            &board,
+            board.occupancy::<{ Color::White }>(),
+            &mut moves,
+        );
+
+        moves
+    }
+
+    #[test]
+    fn generates_king_moves() {
+        assert_move_cases(
+            [
+                MoveCase {
+                    name: "king from center on empty board",
+                    board: board!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . K . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                    moves: moves!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . x x x . . .
+                        . . x o x . . .
+                        . . x x x . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                },
+                MoveCase {
+                    name: "king from corner",
+                    board: board!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        K . . . . . . .
+                    ),
+                    moves: moves!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        x x . . . . . .
+                        o x . . . . . .
+                    ),
+                },
+                MoveCase {
+                    name: "king excludes own blockers and includes enemy blockers",
+                    board: board!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . P K p . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                    moves: moves!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . x x x . .
+                        . . . . o x . .
+                        . . . x x x . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                },
+            ],
+            king_moves,
+        );
+    }
+}
