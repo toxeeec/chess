@@ -15,4 +15,18 @@ impl Square {
             Color::Black => Square::new(self.0 + N * 8),
         }
     }
+
+    pub(super) const fn backward_west<const COLOR: Color>(self) -> Self {
+        match COLOR {
+            Color::White => Square::new(self.0 - 9),
+            Color::Black => Square::new(self.0 + 7),
+        }
+    }
+
+    pub(super) const fn backward_east<const COLOR: Color>(self) -> Self {
+        match COLOR {
+            Color::White => Square::new(self.0 - 7),
+            Color::Black => Square::new(self.0 + 9),
+        }
+    }
 }

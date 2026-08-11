@@ -67,6 +67,20 @@ impl Bitboard {
         }
     }
 
+    pub(super) const fn forward_west<const COLOR: Color>(self) -> Self {
+        match COLOR {
+            Color::White => self.shift::<{ Direction::Northwest }>(),
+            Color::Black => self.shift::<{ Direction::Southwest }>(),
+        }
+    }
+
+    pub(super) const fn forward_east<const COLOR: Color>(self) -> Self {
+        match COLOR {
+            Color::White => self.shift::<{ Direction::Northeast }>(),
+            Color::Black => self.shift::<{ Direction::Southeast }>(),
+        }
+    }
+
     pub(super) const fn shift<const DIRECTION: Direction>(self) -> Self {
         match DIRECTION {
             Direction::North => self << 8,

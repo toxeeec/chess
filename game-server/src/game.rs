@@ -112,7 +112,12 @@ impl Game {
         match self.turn {
             Color::White => {
                 let blockers = self.board.occupancy::<{ Color::White }>();
-                add_pawn_moves::<{ Color::White }>(&self.board, empty, &mut self.moves);
+                add_pawn_moves::<{ Color::White }>(
+                    &self.board,
+                    empty,
+                    occ & !blockers,
+                    &mut self.moves,
+                );
                 add_knight_moves::<{ Color::White }>(&self.board, blockers, &mut self.moves);
                 add_rook_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
                 add_bishop_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
@@ -121,7 +126,12 @@ impl Game {
             }
             Color::Black => {
                 let blockers = self.board.occupancy::<{ Color::Black }>();
-                add_pawn_moves::<{ Color::Black }>(&self.board, empty, &mut self.moves);
+                add_pawn_moves::<{ Color::Black }>(
+                    &self.board,
+                    empty,
+                    occ & !blockers,
+                    &mut self.moves,
+                );
                 add_knight_moves::<{ Color::Black }>(&self.board, blockers, &mut self.moves);
                 add_rook_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
                 add_bishop_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
@@ -175,6 +185,17 @@ mod tests {
         );
         assert_eq!(game.turn, Color::Black);
         assert_eq!(game.moves.len(), 20);
+    }
+
+    #[test]
+    fn pawn_capture_removes_captured_piece() {
+        let mut game = Game::from_fen("7k/8/8/3p4/4P3/8/8/K7 w - - 0 1").unwrap();
+
+        assert!(
+            game.make_move(Color::White, "e4d5".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(game.fen(), "7k/8/8/3P4/8/8/8/K7 b - - 0 1");
     }
 
     #[test]
