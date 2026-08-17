@@ -2,7 +2,13 @@ use std::fmt;
 
 use anyhow::{Result, bail};
 
-use crate::{bitboard, bitboard::Bitboard, game::Color, moves::Move, square::Square};
+use crate::{
+    bitboard,
+    bitboard::Bitboard,
+    game::Color,
+    moves::{Move, PromotionPiece},
+    square::Square,
+};
 
 pub(super) struct Board {
     white_pawns: Bitboard,
@@ -200,10 +206,14 @@ impl Board {
         }
     }
 
-    pub(super) fn make_move(&mut self, mve: Move) {
+    pub(super) fn make_move(&mut self, color: Color, mve: Move) {
         self.for_each_bb_mut(|piece| {
             piece.apply_move(mve.from, mve.to);
         });
+
+        if let Some(promotion) = mve.promotion {
+            self.promote(color, promotion, mve.to);
+        }
     }
 
     pub(super) fn fen(&self) -> String {
@@ -239,6 +249,7 @@ impl Board {
         fen
     }
 
+    #[cfg(test)]
     pub(super) const fn occupied(&self) -> Bitboard {
         self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }
@@ -256,6 +267,35 @@ impl Board {
         f(&mut self.black_bishops);
         f(&mut self.black_queens);
         f(&mut self.black_king);
+    }
+
+    fn promote(&mut self, color: Color, promotion: PromotionPiece, to: Square) {
+        let (pawns, promoted) = match (color, promotion) {
+            (Color::White, PromotionPiece::Queen) => {
+                (&mut self.white_pawns, &mut self.white_queens)
+            }
+            (Color::White, PromotionPiece::Rook) => (&mut self.white_pawns, &mut self.white_rooks),
+            (Color::White, PromotionPiece::Bishop) => {
+                (&mut self.white_pawns, &mut self.white_bishops)
+            }
+            (Color::White, PromotionPiece::Knight) => {
+                (&mut self.white_pawns, &mut self.white_knights)
+            }
+            (Color::Black, PromotionPiece::Queen) => {
+                (&mut self.black_pawns, &mut self.black_queens)
+            }
+            (Color::Black, PromotionPiece::Rook) => (&mut self.black_pawns, &mut self.black_rooks),
+            (Color::Black, PromotionPiece::Bishop) => {
+                (&mut self.black_pawns, &mut self.black_bishops)
+            }
+            (Color::Black, PromotionPiece::Knight) => {
+                (&mut self.black_pawns, &mut self.black_knights)
+            }
+        };
+
+        let to = Bitboard::from(to);
+        *pawns &= !to;
+        *promoted |= to;
     }
 
     fn add_piece(&mut self, piece: char, square: Square) -> Result<()> {

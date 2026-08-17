@@ -12,17 +12,18 @@ pass_filenames = false
 stages = ["pre-commit"]
 
 [[repos.hooks]]
-id = "lint:ts"
-name = "lint:ts"
-entry = "pnpm run lint:ts"
+id = "fix:ts"
+name = "fix:ts"
+entry = "pnpm run fix:ts"
 language = "system"
 files = "\\.(ts|tsx)$"
+pass_filenames = false
 stages = ["pre-commit"]
 
 [[repos.hooks]]
-id = "lint:rs"
-name = "lint:rs"
-entry = "pnpm run lint:rs"
+id = "fix:rs"
+name = "fix:rs"
+entry = "pnpm run fix:rs"
 language = "system"
 files = "^game-server/.*\\.rs$"
 pass_filenames = false

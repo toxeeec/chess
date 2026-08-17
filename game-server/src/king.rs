@@ -17,7 +17,7 @@ pub(super) fn add_king_moves<const COLOR: Color>(
 
     let from = unsafe { king.next().unwrap_unchecked() };
     let moves = KING_ATTACKS[from.0 as usize] & !blockers;
-    list.extend(moves.map(|to| Move::new(from, to)));
+    list.extend(moves.map(|to| Move::new(from, to, None)));
 }
 
 const KING_ATTACKS: [Bitboard; 64] = {

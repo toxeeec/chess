@@ -96,7 +96,7 @@ impl Game {
             return Err(MakeMoveError::IllegalMove);
         }
 
-        self.board.make_move(mve);
+        self.board.make_move(self.turn, mve);
         self.turn = self.turn.opponent();
 
         self.moves.clear();
@@ -106,37 +106,27 @@ impl Game {
     }
 
     fn add_moves(&mut self) {
-        let occ = self.board.occupied();
+        let white = self.board.occupancy::<{ Color::White }>();
+        let black = self.board.occupancy::<{ Color::Black }>();
+        let occ = white | black;
         let empty = !occ;
 
         match self.turn {
             Color::White => {
-                let blockers = self.board.occupancy::<{ Color::White }>();
-                add_pawn_moves::<{ Color::White }>(
-                    &self.board,
-                    empty,
-                    occ & !blockers,
-                    &mut self.moves,
-                );
-                add_knight_moves::<{ Color::White }>(&self.board, blockers, &mut self.moves);
-                add_rook_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
-                add_bishop_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
-                add_queen_moves::<{ Color::White }>(&self.board, occ, blockers, &mut self.moves);
-                add_king_moves::<{ Color::White }>(&self.board, blockers, &mut self.moves);
+                add_pawn_moves::<{ Color::White }>(&self.board, empty, black, &mut self.moves);
+                add_knight_moves::<{ Color::White }>(&self.board, white, &mut self.moves);
+                add_rook_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
+                add_bishop_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
+                add_queen_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
+                add_king_moves::<{ Color::White }>(&self.board, white, &mut self.moves);
             }
             Color::Black => {
-                let blockers = self.board.occupancy::<{ Color::Black }>();
-                add_pawn_moves::<{ Color::Black }>(
-                    &self.board,
-                    empty,
-                    occ & !blockers,
-                    &mut self.moves,
-                );
-                add_knight_moves::<{ Color::Black }>(&self.board, blockers, &mut self.moves);
-                add_rook_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
-                add_bishop_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
-                add_queen_moves::<{ Color::Black }>(&self.board, occ, blockers, &mut self.moves);
-                add_king_moves::<{ Color::Black }>(&self.board, blockers, &mut self.moves);
+                add_pawn_moves::<{ Color::Black }>(&self.board, empty, white, &mut self.moves);
+                add_knight_moves::<{ Color::Black }>(&self.board, black, &mut self.moves);
+                add_rook_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
+                add_bishop_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
+                add_queen_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
+                add_king_moves::<{ Color::Black }>(&self.board, black, &mut self.moves);
             }
         }
     }
@@ -196,6 +186,48 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(game.fen(), "7k/8/8/3P4/8/8/8/K7 b - - 0 1");
+    }
+
+    #[test]
+    fn promotes_pawns_to_the_selected_piece() {
+        for (fen, mve, expected) in [
+            (
+                "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+                "a7a8q",
+                "Q6k/8/8/8/8/8/8/K7 b - - 0 1",
+            ),
+            (
+                "1r5k/P7/8/8/8/8/8/K7 w - - 0 1",
+                "a7b8n",
+                "1N5k/8/8/8/8/8/8/K7 b - - 0 1",
+            ),
+            (
+                "7k/8/8/8/8/8/p7/7K b - - 0 1",
+                "a2a1r",
+                "7k/8/8/8/8/8/8/r6K w - - 0 1",
+            ),
+            (
+                "7k/8/8/8/8/8/1p6/B6K b - - 0 1",
+                "b2a1b",
+                "7k/8/8/8/8/8/8/b6K w - - 0 1",
+            ),
+        ] {
+            let mut game = Game::from_fen(fen).unwrap();
+
+            assert!(game.make_move(game.turn, mve.parse().unwrap()).is_ok());
+            assert_eq!(game.fen(), expected);
+        }
+    }
+
+    #[test]
+    fn promotion_requires_a_piece_choice() {
+        let mut game = Game::from_fen("7k/P7/8/8/8/8/8/K7 w - - 0 1").unwrap();
+
+        assert!(
+            game.make_move(Color::White, "a7a8".parse().unwrap())
+                .is_err()
+        );
+        assert_eq!(game.fen(), "7k/P7/8/8/8/8/8/K7 w - - 0 1");
     }
 
     #[test]

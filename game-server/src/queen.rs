@@ -14,7 +14,7 @@ pub(super) fn add_queen_moves<const COLOR: Color>(
 ) {
     for from in board.queens::<COLOR>() {
         let moves = (rook_attacks(from, occupied) | bishop_attacks(from, occupied)) & !blockers;
-        list.extend(moves.map(|to| Move::new(from, to)));
+        list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
 

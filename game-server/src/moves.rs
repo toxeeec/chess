@@ -7,17 +7,34 @@ use anyhow::{Result, bail};
 
 use crate::square::Square;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PromotionPiece {
+    Queen,
+    Rook,
+    Bishop,
+    Knight,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Move {
     pub(super) from: Square,
     pub(super) to: Square,
+    pub(super) promotion: Option<PromotionPiece>,
 }
 
 pub(crate) struct MoveList(Vec<Move>);
 
+impl PromotionPiece {
+    pub(super) const ALL: [Self; 4] = [Self::Queen, Self::Rook, Self::Bishop, Self::Knight];
+}
+
 impl Move {
-    pub(super) const fn new(from: Square, to: Square) -> Self {
-        Self { from, to }
+    pub(super) const fn new(from: Square, to: Square, promotion: Option<PromotionPiece>) -> Self {
+        Self {
+            from,
+            to,
+            promotion,
+        }
     }
 }
 
@@ -56,7 +73,12 @@ impl MoveList {
 
         let from = from.expect("moves! must contain one o source");
 
-        Self(targets.into_iter().map(|to| Move::new(from, to)).collect())
+        Self(
+            targets
+                .into_iter()
+                .map(|to| Move::new(from, to, None))
+                .collect(),
+        )
     }
 
     pub(crate) fn clear(&mut self) {
@@ -80,9 +102,32 @@ impl MoveList {
     pub(crate) fn iter(&self) -> impl Iterator<Item = Move> + '_ {
         self.0.iter().copied()
     }
+}
 
-    pub(crate) fn reserve(&mut self, additional: usize) {
-        self.0.reserve(additional);
+impl TryFrom<&u8> for PromotionPiece {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &u8) -> Result<Self, Self::Error> {
+        match value {
+            b'q' => Ok(Self::Queen),
+            b'r' => Ok(Self::Rook),
+            b'b' => Ok(Self::Bishop),
+            b'n' => Ok(Self::Knight),
+            _ => bail!("invalid promotion piece"),
+        }
+    }
+}
+
+impl fmt::Display for PromotionPiece {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let piece = match self {
+            Self::Queen => 'q',
+            Self::Rook => 'r',
+            Self::Bishop => 'b',
+            Self::Knight => 'n',
+        };
+
+        f.write_char(piece)
     }
 }
 
@@ -90,9 +135,29 @@ impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_char((b'a' + (self.from.0 % 8) as u8) as char)?;
         f.write_char((b'1' + (self.from.0 / 8) as u8) as char)?;
-
         f.write_char((b'a' + (self.to.0 % 8) as u8) as char)?;
-        f.write_char((b'1' + (self.to.0 / 8) as u8) as char)
+        f.write_char((b'1' + (self.to.0 / 8) as u8) as char)?;
+        if let Some(promotion) = self.promotion {
+            write!(f, "{promotion}")?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for Move {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let value = value.as_bytes();
+        if value.len() != 4 && value.len() != 5 {
+            bail!("move must contain 4 or 5 characters");
+        }
+
+        let from = parse_square(value[0], value[1])?;
+        let to = parse_square(value[2], value[3])?;
+        let promotion = value.get(4).map(PromotionPiece::try_from).transpose()?;
+
+        Ok(Self::new(from, to, promotion))
     }
 }
 
@@ -107,22 +172,6 @@ impl fmt::Display for MoveList {
             }
         }
         Ok(())
-    }
-}
-
-impl FromStr for Move {
-    type Err = anyhow::Error;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let value = value.as_bytes();
-        if value.len() != 4 {
-            bail!("move must contain exactly 4 characters");
-        }
-
-        Ok(Self::new(
-            parse_square(value[0], value[1])?,
-            parse_square(value[2], value[3])?,
-        ))
     }
 }
 
@@ -146,34 +195,44 @@ mod tests {
 
     use crate::square::Square;
 
-    use super::Move;
+    use super::{Move, PromotionPiece};
 
     #[test]
     fn parses_valid_moves() {
         assert_eq!(
             Move::from_str("a2a4").unwrap(),
-            Move::new(Square::new(8), Square::new(24))
+            Move::new(Square::new(8), Square::new(24), None)
         );
         assert_eq!(
             Move::from_str("h7h5").unwrap(),
-            Move::new(Square::new(55), Square::new(39))
+            Move::new(Square::new(55), Square::new(39), None)
         );
         assert_eq!(
             Move::from_str("a1h8").unwrap(),
-            Move::new(Square::new(0), Square::new(63))
+            Move::new(Square::new(0), Square::new(63), None)
+        );
+        assert_eq!(
+            Move::from_str("a7a8n").unwrap(),
+            Move::new(
+                Square::new(48),
+                Square::new(56),
+                Some(PromotionPiece::Knight)
+            )
         );
     }
 
     #[test]
     fn rejects_invalid_moves() {
-        for mve in ["", "a2a", "a2a44", "i2a4", "a0a4", "a2i4", "a2a9", "A2A4"] {
+        for mve in [
+            "", "a2a", "a2a44q", "a7a8k", "a7a8Q", "i2a4", "a0a4", "a2i4", "a2a9", "A2A4",
+        ] {
             assert!(Move::from_str(mve).is_err(), "{mve} should be invalid");
         }
     }
 
     #[test]
     fn roundtrips_through_string() {
-        for mve in ["a2a4", "h7h5", "a1h8"] {
+        for mve in ["a2a4", "h7h5", "a1h8", "a7a8q", "b2a1r", "c7c8b", "h2h1n"] {
             assert_eq!(Move::from_str(mve).unwrap().to_string(), mve);
         }
     }

@@ -14,7 +14,7 @@ pub(super) fn add_bishop_moves<const COLOR: Color>(
 ) {
     for from in board.bishops::<COLOR>() {
         let moves = bishop_attacks(from, occupied) & !blockers;
-        list.extend(moves.map(|to| Move::new(from, to)));
+        list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
 

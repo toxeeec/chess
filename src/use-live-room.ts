@@ -9,37 +9,54 @@ const MAX_RETRIES = 3
 const BASE_DELAY_MS = 1_000
 
 const squarePattern = "[a-h][1-8]"
-const movePattern = `${squarePattern}${squarePattern}`
-const moveRegex = new RegExp(`^${movePattern}$`, "i")
-const movesRegex = new RegExp(`^(?:${movePattern}(?: ${movePattern})*)?$`, "i")
+const movePattern = `${squarePattern}${squarePattern}[qrbn]?`
+const moveRegex = new RegExp(`^${movePattern}$`)
+const movesRegex = new RegExp(`^(?:${movePattern}(?: ${movePattern})*)?$`)
 
-export const moveCodec = z.codec(
-	z.string().regex(moveRegex, "Invalid move format"),
-	z.object({ from: z.number(), to: z.number() }),
-	{
-		decode: (moveStr) => {
-			const fromFile = moveStr[0]!.charCodeAt(0) - "a".charCodeAt(0)
-			const fromRank = 8 - Number(moveStr[1])
-			const toFile = moveStr[2]!.charCodeAt(0) - "a".charCodeAt(0)
-			const toRank = 8 - Number(moveStr[3])
-			return { from: fromRank * 8 + fromFile, to: toRank * 8 + toFile }
-		},
-		encode: (move) => {
-			const fromFile = String.fromCharCode("a".charCodeAt(0) + (move.from % 8))
-			const fromRank = 8 - Math.floor(move.from / 8)
-			const toFile = String.fromCharCode("a".charCodeAt(0) + (move.to % 8))
-			const toRank = 8 - Math.floor(move.to / 8)
-			return `${fromFile}${fromRank}${toFile}${toRank}`
-		},
-	},
-)
-export type Move = z.infer<typeof moveCodec>
+const promotionPieceSchema = z.enum(["q", "r", "b", "n"])
+type PromotionPiece = z.infer<typeof promotionPieceSchema>
+
+const moveSchema = z.object({
+	from: z.number(),
+	to: z.number(),
+	promotion: promotionPieceSchema.optional(),
+})
+export type Move = z.infer<typeof moveSchema>
+
+function isPromotionPiece(value: string | undefined): value is PromotionPiece {
+	return promotionPieceSchema.options.some((piece) => piece === value)
+}
+
+function decodeMove(moveStr: string) {
+	const fromFile = moveStr[0]!.charCodeAt(0) - "a".charCodeAt(0)
+	const fromRank = 8 - Number(moveStr[1])
+	const toFile = moveStr[2]!.charCodeAt(0) - "a".charCodeAt(0)
+	const toRank = 8 - Number(moveStr[3])
+	const promotion = moveStr[4]
+	return {
+		from: fromRank * 8 + fromFile,
+		to: toRank * 8 + toFile,
+		...(isPromotionPiece(promotion) && { promotion }),
+	}
+}
+
+function encodeMove(move: Move) {
+	const fromFile = String.fromCharCode("a".charCodeAt(0) + (move.from % 8))
+	const fromRank = 8 - Math.floor(move.from / 8)
+	const toFile = String.fromCharCode("a".charCodeAt(0) + (move.to % 8))
+	const toRank = 8 - Math.floor(move.to / 8)
+	return `${fromFile}${fromRank}${toFile}${toRank}${move.promotion ?? ""}`
+}
+
+export const moveCodec = z.codec(z.string().regex(moveRegex, "Invalid move format"), moveSchema, {
+	decode: decodeMove,
+	encode: encodeMove,
+})
 
 const movesSchema = z
 	.string()
 	.regex(movesRegex, "Invalid moves format")
-	.transform((moves) => (moves === "" ? [] : moves.split(" ")))
-	.pipe(z.array(moveCodec))
+	.transform((moves) => (moves === "" ? [] : moves.split(" ").map(decodeMove)))
 
 const playerSchema = z.enum(["white", "black"])
 
@@ -205,4 +222,52 @@ function createLiveRoomUrl(path: string) {
 	wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:"
 
 	return wsUrl
+}
+
+if (import.meta.vitest) {
+	const { expect, it } = import.meta.vitest
+
+	it.concurrent.each(["a1a1", "h8h8", "a7a8q", "a7a8r", "a7a8b", "a7a8n"])(
+		"accepts valid move %s",
+		(move) => {
+			expect(() => moveCodec.decode(move)).not.toThrow()
+		},
+	)
+
+	it.concurrent.each([
+		"",
+		"a1a1 ",
+		" a1a1",
+		"a1a1qextra",
+		"a1a",
+		"a1a11",
+		"A1a1",
+		"i1a1",
+		"a0a1",
+		"a1I1",
+		"a1a9",
+		"a7a8k",
+	])("rejects invalid move %j", (move) => {
+		expect(() => moveCodec.decode(move)).toThrow("Invalid move format")
+	})
+
+	it.concurrent.each(["", "a1a1", "a1a1 h8h8", "a7a8q h2h1n"])(
+		"accepts valid move list %j",
+		(moves) => {
+			expect(() => movesSchema.parse(moves)).not.toThrow()
+		},
+	)
+
+	it.concurrent.each([" ", "a1a1 ", " a1a1", "a1a1  h8h8", "a1a1\th8h8", "a1a1 h8h9"])(
+		"rejects invalid move list %j",
+		(moves) => {
+			expect(() => movesSchema.parse(moves)).toThrow("Invalid moves format")
+		},
+	)
+
+	it.concurrent("encodes and decodes moves", () => {
+		expect(moveCodec.decode("a1h8")).toEqual({ from: 56, to: 7 })
+		expect(moveCodec.decode("a7a8q")).toEqual({ from: 8, to: 0, promotion: "q" })
+		expect(moveCodec.encode({ from: 55, to: 63, promotion: "n" })).toBe("h2h1n")
+	})
 }

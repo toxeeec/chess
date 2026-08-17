@@ -1,7 +1,7 @@
 use std::{
     fmt,
     marker::ConstParamTy,
-    ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr},
 };
 
 use crate::{game::Color, square::Square};
@@ -183,10 +183,35 @@ const impl BitAnd for Bitboard {
     }
 }
 
+impl BitAnd<Square> for Bitboard {
+    type Output = Bitboard;
+    fn bitand(self, rhs: Square) -> Self::Output {
+        Self(self.0 & Self::from(rhs).0)
+    }
+}
+
+const impl BitAndAssign for Bitboard {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
 const impl BitOr for Bitboard {
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
         Self(self.0 | rhs.0)
+    }
+}
+
+const impl BitOrAssign for Bitboard {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitOrAssign<Square> for Bitboard {
+    fn bitor_assign(&mut self, rhs: Square) {
+        self.0 |= Self::from(rhs).0;
     }
 }
 
@@ -211,19 +236,6 @@ const impl Shr<u32> for Bitboard {
     }
 }
 
-impl BitAnd<Square> for Bitboard {
-    type Output = Bitboard;
-    fn bitand(self, rhs: Square) -> Self::Output {
-        Self(self.0 & Self::from(rhs).0)
-    }
-}
-
-impl BitOrAssign<Square> for Bitboard {
-    fn bitor_assign(&mut self, rhs: Square) {
-        self.0 |= Self::from(rhs).0;
-    }
-}
-
 impl Iterator for Bitboard {
     type Item = Square;
     fn next(&mut self) -> Option<Self::Item> {
@@ -243,3 +255,4 @@ impl Iterator for Bitboard {
 }
 
 impl ExactSizeIterator for Bitboard {}
+unsafe impl std::iter::TrustedLen for Bitboard {}

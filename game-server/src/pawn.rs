@@ -2,7 +2,7 @@ use crate::{
     bitboard::Bitboard,
     board::Board,
     game::Color,
-    moves::{Move, MoveList},
+    moves::{Move, MoveList, PromotionPiece},
 };
 
 pub(super) fn add_pawn_moves<const COLOR: Color>(
@@ -12,21 +12,38 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
     list: &mut MoveList,
 ) {
     let pawns = board.pawns::<COLOR>();
+    let promotion_rank = Bitboard::relative_rank::<COLOR>(8);
 
-    let single_pushes =
-        ((pawns & !Bitboard::relative_rank::<COLOR>(7)).forward::<COLOR, 1>()) & empty;
+    let single_pushes = pawns.forward::<COLOR, 1>() & empty & !promotion_rank;
     let double_pushes =
         ((single_pushes & Bitboard::relative_rank::<COLOR>(3)).forward::<COLOR, 1>()) & empty;
-    let west_captures = pawns.forward_west::<COLOR>() & enemies;
-    let east_captures = pawns.forward_east::<COLOR>() & enemies;
 
-    list.reserve(
-        single_pushes.len() + double_pushes.len() + west_captures.len() + east_captures.len(),
+    let west_captures = pawns.forward_west::<COLOR>() & enemies & !promotion_rank;
+    let east_captures = pawns.forward_east::<COLOR>() & enemies & !promotion_rank;
+
+    let quiet_promotions = pawns.forward::<COLOR, 1>() & empty & promotion_rank;
+    let west_capture_promotions = pawns.forward_west::<COLOR>() & enemies & promotion_rank;
+    let east_capture_promotions = pawns.forward_east::<COLOR>() & enemies & promotion_rank;
+
+    list.extend(
+        single_pushes
+            .map(|to| Move::new(to.backward::<COLOR, 1>(), to, None))
+            .chain(double_pushes.map(|to| Move::new(to.backward::<COLOR, 2>(), to, None)))
+            .chain(west_captures.map(|to| Move::new(to.backward_east::<COLOR>(), to, None)))
+            .chain(east_captures.map(|to| Move::new(to.backward_west::<COLOR>(), to, None))),
     );
-    list.extend(single_pushes.map(|to| Move::new(to.backward::<COLOR, 1>(), to)));
-    list.extend(double_pushes.map(|to| Move::new(to.backward::<COLOR, 2>(), to)));
-    list.extend(west_captures.map(|to| Move::new(to.backward_east::<COLOR>(), to)));
-    list.extend(east_captures.map(|to| Move::new(to.backward_west::<COLOR>(), to)));
+    list.extend(
+        quiet_promotions
+            .map(|to| (to.backward::<COLOR, 1>(), to))
+            .chain(
+                west_capture_promotions
+                    .map(|to| (to.backward_east::<COLOR>(), to))
+                    .chain(east_capture_promotions.map(|to| (to.backward_west::<COLOR>(), to))),
+            )
+            .flat_map(|(from, to)| {
+                PromotionPiece::ALL.map(|piece| Move::new(from, to, Some(piece)))
+            }),
+    );
 }
 
 #[cfg(test)]
@@ -249,6 +266,45 @@ mod tests {
                 },
             ],
             pawn_moves::<{ Color::Black }>,
+        );
+    }
+
+    #[test]
+    fn generates_all_quiet_and_capture_promotions() {
+        let white = pawn_moves::<{ Color::White }>(board!(
+            r . n . . . . .
+            . P . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+        ));
+        let black = pawn_moves::<{ Color::Black }>(board!(
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . p .
+            . . . . . B . R
+        ));
+
+        assert_eq!(
+            white.iter().map(|mve| mve.to_string()).collect::<Vec<_>>(),
+            [
+                "b7b8q", "b7b8r", "b7b8b", "b7b8n", "b7a8q", "b7a8r", "b7a8b", "b7a8n", "b7c8q",
+                "b7c8r", "b7c8b", "b7c8n",
+            ]
+        );
+        assert_eq!(
+            black.iter().map(|mve| mve.to_string()).collect::<Vec<_>>(),
+            [
+                "g2g1q", "g2g1r", "g2g1b", "g2g1n", "g2f1q", "g2f1r", "g2f1b", "g2f1n", "g2h1q",
+                "g2h1r", "g2h1b", "g2h1n",
+            ]
         );
     }
 }

@@ -3,7 +3,8 @@
     const_trait_impl,
     const_convert,
     const_ops,
-    const_range
+    const_range,
+    trusted_len
 )]
 
 mod bishop;

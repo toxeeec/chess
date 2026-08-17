@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 
 import { clsx } from "./clsx"
-import { useGameStore, useShallow } from "./game-store"
+import { useGameStore } from "./game-store"
 import type { Player } from "./room"
+import { useShallow } from "./store"
 
 export function PlayerClock({ player }: { player: Player }) {
 	const [active, remainingMs, receivedAtMs] = useGameStore(

@@ -1,4 +1,3 @@
-import { runDurableObjectAlarm } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { eq } from "drizzle-orm"
 import { beforeAll, describe, expect, inject, it } from "vitest"
@@ -27,9 +26,8 @@ beforeAll(async () => {
 
 async function expireWaitingRoom(roomId: RoomId) {
 	const stub = env.GAME_SERVER.getByName(roomId)
-	await stub.init({ ...TEST_GAME_CONFIG, joinTimeoutMs: 1 })
-	await new Promise((resolve) => setTimeout(resolve, 10))
-	await runDurableObjectAlarm(stub)
+	await stub.init({ ...TEST_GAME_CONFIG, joinTimeoutMs: 40 })
+	await new Promise((resolve) => setTimeout(resolve, 50))
 	expect(await stub.snapshot()).toMatchObject({ status: "expired" })
 }
 

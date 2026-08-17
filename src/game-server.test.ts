@@ -1,4 +1,3 @@
-import { runDurableObjectAlarm } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { describe, expect, it, type DeeplyAllowMatchers } from "vitest"
 
@@ -6,8 +5,10 @@ import type { Player, RoomId } from "./room"
 import { generateRoomId } from "./room.server"
 import { TEST_GAME_CONFIG } from "./test-utils"
 
-function sleep(ms: number) {
-	return new Promise((resolve) => setTimeout(resolve, ms))
+const TEST_ALARM_TIMEOUT_MS = 40
+
+function waitForAlarm() {
+	return new Promise((resolve) => setTimeout(resolve, 50))
 }
 
 function clockMatcher(matcher?: DeeplyAllowMatchers<any>) {
@@ -147,13 +148,12 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			joinTimeoutMs: 1,
+			joinTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using whiteConnection = await acceptWebSocket(roomId, "white")
 		await whiteConnection.readMessage()
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		await expect(whiteConnection.readMessage()).resolves.toEqual(
 			statusMessageMatcher({
@@ -169,12 +169,11 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			firstMoveTimeoutMs: 1,
+			firstMoveTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using connections = await connectPlayers(roomId)
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		const expectedMessage = statusMessageMatcher({
 			status: "expired",
@@ -193,14 +192,13 @@ describe("GameServer", () => {
 		await stub.init({
 			...TEST_GAME_CONFIG,
 			firstMoveTimeoutMs: 1_000,
-			timeControlMs: 1,
+			timeControlMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using connections = await connectPlayers(roomId)
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
 		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		const expected = statusMessageMatcher({
 			status: "ended",
@@ -230,14 +228,13 @@ describe("GameServer", () => {
 		await stub.init({
 			...TEST_GAME_CONFIG,
 			firstMoveTimeoutMs: 1_000,
-			timeControlMs: 1,
+			timeControlMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using connections = await connectPlayers(roomId)
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
 		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		const expected = statusMessageMatcher({
 			status: "ended",
@@ -262,13 +259,12 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			disconnectTimeoutMs: 1,
+			disconnectTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using connections = await connectPlayers(roomId)
 
 		connections.white.webSocket.close()
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		await expect(connections.black.readMessage()).resolves.toEqual(
 			statusMessageMatcher({
@@ -284,15 +280,14 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			disconnectTimeoutMs: 1,
+			disconnectTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using connections = await connectPlayers(roomId)
 		connections.white.webSocket.send(JSON.stringify({ type: "move", data: "e2e3" }))
 		await Promise.all([connections.white.readMessage(), connections.black.readMessage()])
 
 		connections.white.webSocket.close()
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		await expect(connections.black.readMessage()).resolves.toEqual(
 			statusMessageMatcher({
@@ -394,13 +389,12 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			joinTimeoutMs: 1,
+			joinTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using whiteConnection = await acceptWebSocket(roomId, "white")
 		await whiteConnection.readMessage()
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		using blackConnection = await acceptWebSocket(roomId, "black")
 
@@ -420,12 +414,11 @@ describe("GameServer", () => {
 		const stub = env.GAME_SERVER.getByName(roomId)
 		await stub.init({
 			...TEST_GAME_CONFIG,
-			firstMoveTimeoutMs: 1,
+			firstMoveTimeoutMs: TEST_ALARM_TIMEOUT_MS,
 		})
 		using _ = await connectPlayers(roomId)
 
-		await sleep(10)
-		await runDurableObjectAlarm(stub)
+		await waitForAlarm()
 
 		using newConnection = await acceptWebSocket(roomId, "white")
 		await expect(newConnection.readMessage()).resolves.toEqual(

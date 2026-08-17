@@ -14,7 +14,7 @@ pub(super) fn add_rook_moves<const COLOR: Color>(
 ) {
     for from in board.rooks::<COLOR>() {
         let moves = rook_attacks(from, occupied) & !blockers;
-        list.extend(moves.map(|to| Move::new(from, to)));
+        list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
 

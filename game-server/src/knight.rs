@@ -15,7 +15,7 @@ pub(super) fn add_knight_moves<const COLOR: Color>(
 
     for from in knights {
         let moves = KNIGHT_ATTACKS[from.0 as usize] & !blockers;
-        list.extend(moves.map(|to| Move::new(from, to)));
+        list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
 

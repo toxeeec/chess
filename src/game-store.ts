@@ -1,14 +1,14 @@
-import { createContext, use, useRef, useSyncExternalStore } from "react"
+import { createContext, use, useSyncExternalStore } from "react"
 
+import { Piece } from "./piece"
 import type { Player } from "./room"
 import type { Clock, Move } from "./use-live-room"
-
-const PIECES = ["r", "n", "b", "q", "k", "p", "R", "N", "B", "Q", "K", "P"] as const
-export type Piece = (typeof PIECES)[number]
 
 type GameStore = ReturnType<typeof createGameStore>
 type GameState = ReturnType<GameStore["getState"]>
 type Snapshot = { fen: string; legalMoves: readonly Move[]; clock: Clock }
+
+export const GameStoreContext = createContext<GameStore | null>(null)
 
 export function createGameStore({
 	snapshot: { fen, legalMoves, clock },
@@ -20,12 +20,17 @@ export function createGameStore({
 	onMove?: (move: Move) => void
 }) {
 	const turn = getTurnFromFen(fen)
+	const getLegalMoves = () => {
+		return state.legalMoves
+	}
+
 	let state = {
 		board: createBoardFromFen(fen),
 		turn,
 		player,
 		clock: { ...clock, receivedAtMs: Date.now() },
 		legalMoves: turn === player ? legalMoves : [],
+		getLegalMoves,
 	}
 
 	const listeners = new Set<() => void>()
@@ -55,16 +60,12 @@ export function createGameStore({
 			notify()
 		},
 		movePiece: (move: Move) => {
-			const movingPiece = state.board[move.from]
-			if (!movingPiece || move.from === move.to) return
-			if (!state.legalMoves.some(({ from, to }) => from === move.from && to === move.to)) return
+			if (move.from === move.to) return
+			if (!state.legalMoves.some((legalMove) => movesEqual(legalMove, move))) return
 
-			const board = [...state.board]
-			board[move.from] = undefined
-			board[move.to] = movingPiece
 			state = {
 				...state,
-				board,
+				board: nextBoard(state.board, move),
 				turn: opponent(state.turn),
 				clock: switchClock(state.clock, state.player, state.turn),
 				legalMoves: [],
@@ -84,15 +85,9 @@ export function createGameStore({
 			turn: Player
 			clock: Clock
 		}) => {
-			const movingPiece = state.board[move.from]
-			if (!movingPiece) return
-
-			const board = [...state.board]
-			board[move.from] = undefined
-			board[move.to] = movingPiece
 			state = {
 				...state,
-				board,
+				board: nextBoard(state.board, move),
 				turn,
 				clock: { ...clock, receivedAtMs: Date.now() },
 				legalMoves: turn === player ? legalMoves : [],
@@ -106,8 +101,6 @@ export function createGameStore({
 	}
 }
 
-export const GameStoreContext = createContext<GameStore | null>(null)
-
 export function useGameStore<T>(selector: (state: GameState) => T) {
 	const store = use(GameStoreContext)
 	if (!store) throw new Error("useGameStore must be used within GameStoreContext")
@@ -117,25 +110,6 @@ export function useGameStore<T>(selector: (state: GameState) => T) {
 		() => selector(store.getState()),
 		() => selector(store.getState()),
 	)
-}
-
-export function useShallow<State, Selected extends readonly unknown[]>(
-	selector: (state: State) => Selected,
-) {
-	const previous = useRef<Selected>(undefined)
-	const hasPrevious = useRef(false)
-
-	return (state: State) => {
-		const next = selector(state)
-
-		if (hasPrevious.current && shallow(previous.current!, next)) {
-			return previous.current!
-		}
-
-		previous.current = next
-		hasPrevious.current = true
-		return next
-	}
 }
 
 function switchClock(clock: GameState["clock"], player: Player, turn: Player) {
@@ -189,7 +163,7 @@ function createBoardFromFen(fen: string) {
 				continue
 			}
 
-			if (isPiece(char)) {
+			if (Piece.is(char)) {
 				nextBoard.push(char)
 				continue
 			}
@@ -202,18 +176,18 @@ function createBoardFromFen(fen: string) {
 	return nextBoard
 }
 
-function isPiece(piece: string): piece is Piece {
-	return PIECES.includes(piece)
+function movesEqual(a: Move, b: Move) {
+	return a.from === b.from && a.to === b.to && a.promotion === b.promotion
 }
 
-function shallow<T extends readonly unknown[]>(a: T, b: T) {
-	if (Object.is(a, b)) return true
-	if (a.length !== b.length) return false
+function nextBoard(board: readonly (Piece | undefined)[], move: Move) {
+	const movingPiece = board[move.from]
+	if (!movingPiece) throw new Error("Invalid move")
 
-	for (let i = 0; i < a.length; ++i) {
-		if (!Object.is(a[i], b[i])) return false
-	}
-	return true
+	const nextBoard = [...board]
+	nextBoard[move.from] = undefined
+	nextBoard[move.to] = move.promotion ? Piece.promote(movingPiece, move.promotion) : movingPiece
+	return nextBoard
 }
 
 if (import.meta.vitest) {
@@ -352,5 +326,45 @@ if (import.meta.vitest) {
 		expect(store.getState().board[44]).toBe("P")
 		expect(store.getState().turn).toBe("white")
 		expect(store.getState().legalMoves).toEqual([])
+	})
+
+	it.concurrent("applies the selected promotion piece", () => {
+		const promotion = { from: 8, to: 0, promotion: "n" } as const
+		const store = createGameStore({
+			player: "white",
+			snapshot: {
+				fen: "8/P7/8/8/8/8/8/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [promotion],
+			},
+		})
+
+		store.movePiece({ from: 8, to: 0, promotion: "q" })
+		expect(store.getState().board[8]).toBe("P")
+
+		store.movePiece(promotion)
+		expect(store.getState().board[8]).toBeUndefined()
+		expect(store.getState().board[0]).toBe("N")
+	})
+
+	it.concurrent("applies remote black promotions", () => {
+		const store = createGameStore({
+			player: "white",
+			snapshot: {
+				fen: "8/8/8/8/8/8/p7/8 b - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [],
+			},
+		})
+
+		store.applyMove({
+			move: { from: 48, to: 56, promotion: "r" },
+			turn: "white",
+			clock: TEST_CLOCK,
+			legalMoves: [],
+		})
+
+		expect(store.getState().board[48]).toBeUndefined()
+		expect(store.getState().board[56]).toBe("r")
 	})
 }
