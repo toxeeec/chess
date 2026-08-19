@@ -1,7 +1,7 @@
 use std::{
     fmt,
     marker::ConstParamTy,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, Not, Shl, Shr},
 };
 
 use crate::{game::Color, square::Square};
@@ -130,7 +130,7 @@ impl Bitboard {
     pub(super) fn apply_move(&mut self, from: Square, to: Square) {
         let from_mask = Self::from(from).0;
         let to_mask = Self::from(to).0;
-        let add_mask = ((self.0 & from_mask) >> from.0).wrapping_neg() & to_mask;
+        let add_mask = ((self.0 & from_mask) >> usize::from(from)).wrapping_neg() & to_mask;
 
         self.0 &= !(from_mask | to_mask);
         self.0 |= add_mask;
@@ -139,7 +139,7 @@ impl Bitboard {
 
 const impl From<Square> for Bitboard {
     fn from(square: Square) -> Self {
-        Self(1 << square.0)
+        Self(1 << usize::from(square))
     }
 }
 
@@ -243,7 +243,7 @@ impl Iterator for Bitboard {
             return None;
         };
 
-        let square = Square(self.0.trailing_zeros());
+        let square = Square::new(self.0.trailing_zeros());
         self.0 &= self.0 - 1;
         Some(square)
     }
@@ -256,3 +256,12 @@ impl Iterator for Bitboard {
 
 impl ExactSizeIterator for Bitboard {}
 unsafe impl std::iter::TrustedLen for Bitboard {}
+
+impl Index<Square> for [Bitboard; 64] {
+    type Output = Bitboard;
+
+    fn index(&self, square: Square) -> &Self::Output {
+        let square = usize::from(square);
+        unsafe { self.get_unchecked(square) }
+    }
+}

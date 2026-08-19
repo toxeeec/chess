@@ -14,12 +14,12 @@ pub(super) fn add_knight_moves<const COLOR: Color>(
     let knights = board.knights::<COLOR>();
 
     for from in knights {
-        let moves = KNIGHT_ATTACKS[from.0 as usize] & !blockers;
+        let moves = KNIGHT_ATTACKS[from] & !blockers;
         list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
 
-const KNIGHT_ATTACKS: [Bitboard; 64] = {
+pub(super) const KNIGHT_ATTACKS: [Bitboard; 64] = {
     let mut attacks = [Bitboard::EMPTY; 64];
     let mut square = 0;
 

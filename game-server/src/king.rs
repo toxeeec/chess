@@ -9,6 +9,7 @@ use crate::{
 pub(super) fn add_king_moves<const COLOR: Color>(
     board: &Board,
     blockers: Bitboard,
+    forbidden: Bitboard,
     list: &mut MoveList,
 ) {
     let mut king = board.king::<COLOR>();
@@ -16,11 +17,11 @@ pub(super) fn add_king_moves<const COLOR: Color>(
     debug_assert_eq!(king.len(), 1);
 
     let from = unsafe { king.next().unwrap_unchecked() };
-    let moves = KING_ATTACKS[from.0 as usize] & !blockers;
+    let moves = KING_ATTACKS[from] & !(blockers | forbidden);
     list.extend(moves.map(|to| Move::new(from, to, None)));
 }
 
-const KING_ATTACKS: [Bitboard; 64] = {
+pub(super) const KING_ATTACKS: [Bitboard; 64] = {
     let mut attacks = [Bitboard::EMPTY; 64];
     let mut square = 0;
 
@@ -43,6 +44,7 @@ const KING_ATTACKS: [Bitboard; 64] = {
 #[cfg(test)]
 mod tests {
     use crate::{
+        attacks::king_forbidden_squares,
         board::Board,
         game::Color,
         moves::MoveList,
@@ -53,10 +55,13 @@ mod tests {
 
     fn king_moves(board: Board) -> MoveList {
         let mut moves = MoveList::default();
+        let occupied = board.occupied();
+        let forbidden = king_forbidden_squares::<{ Color::Black }>(&board, occupied);
 
         add_king_moves::<{ Color::White }>(
             &board,
             board.occupancy::<{ Color::White }>(),
+            forbidden,
             &mut moves,
         );
 
@@ -131,7 +136,53 @@ mod tests {
                         . . . . . . . .
                         . . . x x x . .
                         . . . . o x . .
-                        . . . x x x . .
+                        . . . x . x . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                },
+                MoveCase {
+                    name: "king cannot retreat along a checking slider ray",
+                    board: board!(
+                        . . . . r . . .
+                        . . . . K . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                    moves: moves!(
+                        . . . . x . . .
+                        . . . x o x . .
+                        . . . x . x . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                },
+                MoveCase {
+                    name: "king cannot capture a defended enemy piece",
+                    board: board!(
+                        . . . . . r . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . K p . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                    ),
+                    moves: moves!(
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . . . . . .
+                        . . . x x . . .
+                        . . . x o . . .
+                        . . . x . x . .
                         . . . . . . . .
                         . . . . . . . .
                     ),

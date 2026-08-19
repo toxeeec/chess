@@ -1,8 +1,9 @@
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::marker::ConstParamTy;
+use std::{marker::ConstParamTy, ops::Not};
 
 use crate::{
+    attacks::king_forbidden_squares,
     bishop::add_bishop_moves,
     board::Board,
     king::add_king_moves,
@@ -41,6 +42,14 @@ impl Color {
             "b" => Ok(Self::Black),
             _ => bail!("invalid FEN active color: {value}"),
         }
+    }
+}
+
+const impl Not for Color {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        self.opponent()
     }
 }
 
@@ -113,20 +122,22 @@ impl Game {
 
         match self.turn {
             Color::White => {
+                let forbidden = king_forbidden_squares::<{ Color::Black }>(&self.board, occ);
                 add_pawn_moves::<{ Color::White }>(&self.board, empty, black, &mut self.moves);
                 add_knight_moves::<{ Color::White }>(&self.board, white, &mut self.moves);
-                add_rook_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
                 add_bishop_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
+                add_rook_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
                 add_queen_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
-                add_king_moves::<{ Color::White }>(&self.board, white, &mut self.moves);
+                add_king_moves::<{ Color::White }>(&self.board, white, forbidden, &mut self.moves);
             }
             Color::Black => {
+                let forbidden = king_forbidden_squares::<{ Color::White }>(&self.board, occ);
                 add_pawn_moves::<{ Color::Black }>(&self.board, empty, white, &mut self.moves);
                 add_knight_moves::<{ Color::Black }>(&self.board, black, &mut self.moves);
-                add_rook_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
                 add_bishop_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
+                add_rook_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
                 add_queen_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
-                add_king_moves::<{ Color::Black }>(&self.board, black, &mut self.moves);
+                add_king_moves::<{ Color::Black }>(&self.board, black, forbidden, &mut self.moves);
             }
         }
     }

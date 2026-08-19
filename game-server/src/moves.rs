@@ -133,10 +133,10 @@ impl fmt::Display for PromotionPiece {
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_char((b'a' + (self.from.0 % 8) as u8) as char)?;
-        f.write_char((b'1' + (self.from.0 / 8) as u8) as char)?;
-        f.write_char((b'a' + (self.to.0 % 8) as u8) as char)?;
-        f.write_char((b'1' + (self.to.0 / 8) as u8) as char)?;
+        f.write_char((b'a' + self.from.file()) as char)?;
+        f.write_char((b'1' + self.from.rank()) as char)?;
+        f.write_char((b'a' + self.to.file()) as char)?;
+        f.write_char((b'1' + self.to.rank()) as char)?;
         if let Some(promotion) = self.promotion {
             write!(f, "{promotion}")?;
         }
@@ -193,7 +193,7 @@ fn parse_square(file: u8, rank: u8) -> Result<Square> {
 mod tests {
     use std::str::FromStr;
 
-    use crate::square::Square;
+    use crate::square;
 
     use super::{Move, PromotionPiece};
 
@@ -201,23 +201,19 @@ mod tests {
     fn parses_valid_moves() {
         assert_eq!(
             Move::from_str("a2a4").unwrap(),
-            Move::new(Square::new(8), Square::new(24), None)
+            Move::new(square!(a2), square!(a4), None)
         );
         assert_eq!(
             Move::from_str("h7h5").unwrap(),
-            Move::new(Square::new(55), Square::new(39), None)
+            Move::new(square!(h7), square!(h5), None)
         );
         assert_eq!(
             Move::from_str("a1h8").unwrap(),
-            Move::new(Square::new(0), Square::new(63), None)
+            Move::new(square!(a1), square!(h8), None)
         );
         assert_eq!(
             Move::from_str("a7a8n").unwrap(),
-            Move::new(
-                Square::new(48),
-                Square::new(56),
-                Some(PromotionPiece::Knight)
-            )
+            Move::new(square!(a7), square!(a8), Some(PromotionPiece::Knight))
         );
     }
 

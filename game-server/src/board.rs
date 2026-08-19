@@ -3,11 +3,12 @@ use std::fmt;
 use anyhow::{Result, bail};
 
 use crate::{
-    bitboard,
     bitboard::Bitboard,
     game::Color,
     moves::{Move, PromotionPiece},
+    square,
     square::Square,
+    squares,
 };
 
 pub(super) struct Board {
@@ -27,19 +28,19 @@ pub(super) struct Board {
 
 impl Default for Board {
     fn default() -> Self {
-        let white_pawns = bitboard![8, 9, 10, 11, 12, 13, 14, 15];
-        let white_rooks = bitboard![0, 7];
-        let white_knights = bitboard![1, 6];
-        let white_bishops = bitboard![2, 5];
-        let white_queens = bitboard![3];
-        let white_king = bitboard![4];
+        let white_pawns = Bitboard::from(squares![a2, b2, c2, d2, e2, f2, g2, h2]);
+        let white_rooks = Bitboard::from(squares![a1, h1]);
+        let white_knights = Bitboard::from(squares![b1, g1]);
+        let white_bishops = Bitboard::from(squares![c1, f1]);
+        let white_queens = Bitboard::from(square!(d1));
+        let white_king = Bitboard::from(square!(e1));
 
-        let black_pawns = bitboard![48, 49, 50, 51, 52, 53, 54, 55];
-        let black_rooks = bitboard![56, 63];
-        let black_knights = bitboard![57, 62];
-        let black_bishops = bitboard![58, 61];
-        let black_queens = bitboard![59];
-        let black_king = bitboard![60];
+        let black_pawns = Bitboard::from(squares![a7, b7, c7, d7, e7, f7, g7, h7]);
+        let black_rooks = Bitboard::from(squares![a8, h8]);
+        let black_knights = Bitboard::from(squares![b8, g8]);
+        let black_bishops = Bitboard::from(squares![c8, f8]);
+        let black_queens = Bitboard::from(square!(d8));
+        let black_king = Bitboard::from(square!(e8));
 
         Self {
             white_pawns,
