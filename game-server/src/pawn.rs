@@ -9,21 +9,27 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
     board: &Board,
     empty: Bitboard,
     enemies: Bitboard,
+    evasion_mask: Bitboard,
     list: &mut MoveList,
 ) {
     let pawns = board.pawns::<COLOR>();
     let promotion_rank = Bitboard::relative_rank::<COLOR>(8);
 
     let single_pushes = pawns.forward::<COLOR, 1>() & empty & !promotion_rank;
-    let double_pushes =
-        ((single_pushes & Bitboard::relative_rank::<COLOR>(3)).forward::<COLOR, 1>()) & empty;
+    let double_pushes = ((single_pushes & Bitboard::relative_rank::<COLOR>(3))
+        .forward::<COLOR, 1>())
+        & empty
+        & evasion_mask;
+    let single_pushes = single_pushes & evasion_mask;
 
-    let west_captures = pawns.forward_west::<COLOR>() & enemies & !promotion_rank;
-    let east_captures = pawns.forward_east::<COLOR>() & enemies & !promotion_rank;
+    let west_captures = pawns.forward_west::<COLOR>() & enemies & !promotion_rank & evasion_mask;
+    let east_captures = pawns.forward_east::<COLOR>() & enemies & !promotion_rank & evasion_mask;
 
-    let quiet_promotions = pawns.forward::<COLOR, 1>() & empty & promotion_rank;
-    let west_capture_promotions = pawns.forward_west::<COLOR>() & enemies & promotion_rank;
-    let east_capture_promotions = pawns.forward_east::<COLOR>() & enemies & promotion_rank;
+    let quiet_promotions = pawns.forward::<COLOR, 1>() & empty & promotion_rank & evasion_mask;
+    let west_capture_promotions =
+        pawns.forward_west::<COLOR>() & enemies & promotion_rank & evasion_mask;
+    let east_capture_promotions =
+        pawns.forward_east::<COLOR>() & enemies & promotion_rank & evasion_mask;
 
     list.extend(
         single_pushes
@@ -49,6 +55,7 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
@@ -62,7 +69,13 @@ mod tests {
         let blockers = board.occupancy::<COLOR>();
         let occupied = board.occupied();
 
-        add_pawn_moves::<COLOR>(&board, !occupied, occupied & !blockers, &mut moves);
+        add_pawn_moves::<COLOR>(
+            &board,
+            !occupied,
+            occupied & !blockers,
+            Bitboard::FULL,
+            &mut moves,
+        );
 
         moves
     }

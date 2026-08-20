@@ -47,6 +47,7 @@ macro_rules! bitboard {
 
 impl Bitboard {
     pub(super) const EMPTY: Self = Self(0);
+    pub(super) const FULL: Self = Self(u64::MAX);
     pub(super) const FILE_A: Self = Self(0x0101010101010101);
     pub(super) const FILE_B: Self = Self::FILE_A << 1;
     pub(super) const FILE_G: Self = Self::FILE_A << 6;
@@ -259,6 +260,15 @@ unsafe impl std::iter::TrustedLen for Bitboard {}
 
 impl Index<Square> for [Bitboard; 64] {
     type Output = Bitboard;
+
+    fn index(&self, square: Square) -> &Self::Output {
+        let square = usize::from(square);
+        unsafe { self.get_unchecked(square) }
+    }
+}
+
+impl Index<Square> for [[Bitboard; 64]; 64] {
+    type Output = [Bitboard; 64];
 
     fn index(&self, square: Square) -> &Self::Output {
         let square = usize::from(square);

@@ -12,11 +12,7 @@ pub(super) fn add_king_moves<const COLOR: Color>(
     forbidden: Bitboard,
     list: &mut MoveList,
 ) {
-    let mut king = board.king::<COLOR>();
-
-    debug_assert_eq!(king.len(), 1);
-
-    let from = unsafe { king.next().unwrap_unchecked() };
+    let from = board.king_square::<COLOR>();
     let moves = KING_ATTACKS[from] & !(blockers | forbidden);
     list.extend(moves.map(|to| Move::new(from, to, None)));
 }
@@ -44,7 +40,7 @@ pub(super) const KING_ATTACKS: [Bitboard; 64] = {
 #[cfg(test)]
 mod tests {
     use crate::{
-        attacks::king_forbidden_squares,
+        attacks::king_threats,
         board::Board,
         game::Color,
         moves::MoveList,
@@ -56,7 +52,7 @@ mod tests {
     fn king_moves(board: Board) -> MoveList {
         let mut moves = MoveList::default();
         let occupied = board.occupied();
-        let forbidden = king_forbidden_squares::<{ Color::Black }>(&board, occupied);
+        let forbidden = king_threats::<{ Color::Black }>(&board, occupied).forbidden;
 
         add_king_moves::<{ Color::White }>(
             &board,

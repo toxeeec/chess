@@ -9,12 +9,13 @@ use crate::{
 pub(super) fn add_knight_moves<const COLOR: Color>(
     board: &Board,
     blockers: Bitboard,
+    evasion_mask: Bitboard,
     list: &mut MoveList,
 ) {
     let knights = board.knights::<COLOR>();
 
     for from in knights {
-        let moves = KNIGHT_ATTACKS[from] & !blockers;
+        let moves = KNIGHT_ATTACKS[from] & !blockers & evasion_mask;
         list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
@@ -42,6 +43,7 @@ pub(super) const KNIGHT_ATTACKS: [Bitboard; 64] = {
 #[cfg(test)]
 mod tests {
     use crate::{
+        bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
@@ -56,6 +58,7 @@ mod tests {
         add_knight_moves::<{ Color::White }>(
             &board,
             board.occupancy::<{ Color::White }>(),
+            Bitboard::FULL,
             &mut moves,
         );
 

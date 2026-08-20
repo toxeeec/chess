@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{marker::ConstParamTy, ops::Not};
 
 use crate::{
-    attacks::king_forbidden_squares,
+    attacks::{KingThreats, evasion_mask, king_threats},
     bishop::add_bishop_moves,
     board::Board,
     king::add_king_moves,
@@ -86,6 +86,7 @@ impl Game {
         let mut fields = fen.split_whitespace();
         let placement = fields.next().context("FEN must contain piece placement")?;
         let active_color = fields.next().context("FEN must contain active color")?;
+
         Ok(Self::new(
             Board::from_fen(placement)?,
             Color::from_fen_value(active_color)?,
@@ -115,37 +116,67 @@ impl Game {
     }
 
     fn add_moves(&mut self) {
-        let white = self.board.occupancy::<{ Color::White }>();
-        let black = self.board.occupancy::<{ Color::Black }>();
-        let occ = white | black;
-        let empty = !occ;
-
         match self.turn {
-            Color::White => {
-                let forbidden = king_forbidden_squares::<{ Color::Black }>(&self.board, occ);
-                add_pawn_moves::<{ Color::White }>(&self.board, empty, black, &mut self.moves);
-                add_knight_moves::<{ Color::White }>(&self.board, white, &mut self.moves);
-                add_bishop_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
-                add_rook_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
-                add_queen_moves::<{ Color::White }>(&self.board, occ, white, &mut self.moves);
-                add_king_moves::<{ Color::White }>(&self.board, white, forbidden, &mut self.moves);
-            }
-            Color::Black => {
-                let forbidden = king_forbidden_squares::<{ Color::White }>(&self.board, occ);
-                add_pawn_moves::<{ Color::Black }>(&self.board, empty, white, &mut self.moves);
-                add_knight_moves::<{ Color::Black }>(&self.board, black, &mut self.moves);
-                add_bishop_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
-                add_rook_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
-                add_queen_moves::<{ Color::Black }>(&self.board, occ, black, &mut self.moves);
-                add_king_moves::<{ Color::Black }>(&self.board, black, forbidden, &mut self.moves);
-            }
+            Color::White => self.add_moves_for::<{ Color::White }>(),
+            Color::Black => self.add_moves_for::<{ Color::Black }>(),
         }
+    }
+
+    fn add_moves_for<const COLOR: Color>(&mut self)
+    where
+        [(); { !COLOR } as usize]:,
+        [(); { !(!COLOR) } as usize]:,
+    {
+        let blockers = self.board.occupancy::<COLOR>();
+        let enemy = self.board.occupancy::<{ !COLOR }>();
+        let occupied = blockers | enemy;
+        let empty = !occupied;
+        let KingThreats {
+            attackers,
+            forbidden,
+        } = king_threats::<{ !COLOR }>(&self.board, occupied);
+
+        let evasion_mask = evasion_mask(self.board.king_square::<COLOR>(), attackers);
+
+        if !evasion_mask.empty() {
+            add_pawn_moves::<COLOR>(&self.board, empty, enemy, evasion_mask, &mut self.moves);
+            add_knight_moves::<COLOR>(&self.board, blockers, evasion_mask, &mut self.moves);
+            add_bishop_moves::<COLOR>(
+                &self.board,
+                occupied,
+                blockers,
+                evasion_mask,
+                &mut self.moves,
+            );
+            add_rook_moves::<COLOR>(
+                &self.board,
+                occupied,
+                blockers,
+                evasion_mask,
+                &mut self.moves,
+            );
+            add_queen_moves::<COLOR>(
+                &self.board,
+                occupied,
+                blockers,
+                evasion_mask,
+                &mut self.moves,
+            );
+        }
+
+        add_king_moves::<COLOR>(&self.board, blockers, forbidden, &mut self.moves);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{square, test_utils::board};
+
     use super::{Color, Game};
+
+    fn has_move(game: &Game, mve: &str) -> bool {
+        game.moves.contains(mve.parse().unwrap())
+    }
 
     #[test]
     fn parses_white_and_black_active_color() {
@@ -163,7 +194,7 @@ mod tests {
         for fen in [
             "",
             "8/8/8/8/8/8/8/8",
-            "8/8/8/8/8/8/8/8 x - - 0 1",
+            "7k/8/8/8/8/8/8/4K3 x - - 0 1",
             "8/8/8/8/8/8/8 w - - 0 1",
         ] {
             assert!(Game::from_fen(fen).is_err(), "{fen} should be invalid");
@@ -186,6 +217,101 @@ mod tests {
         );
         assert_eq!(game.turn, Color::Black);
         assert_eq!(game.moves.len(), 20);
+    }
+
+    #[test]
+    fn non_sliding_check_allows_only_checker_captures() {
+        let game = Game::new(
+            board!(
+                k . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . n . .
+                P . . . . . B .
+                . . . R K . . .
+            ),
+            Color::White,
+        );
+
+        assert!(has_move(&game, "g2f3"));
+        assert!(!has_move(&game, "a2a3"));
+        assert!(!has_move(&game, "d1d2"));
+    }
+
+    #[test]
+    fn sliding_check_allows_checker_captures_and_blocks() {
+        let game = Game::new(
+            board!(
+                . . . . r . . .
+                . . . . . . . k
+                . . . . . . . .
+                . B . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                P . . R . . . .
+                . . . . K . . .
+            ),
+            Color::White,
+        );
+
+        assert!(has_move(&game, "b5e8"));
+        assert!(has_move(&game, "d2e2"));
+        assert!(!has_move(&game, "a2a3"));
+    }
+
+    #[test]
+    fn double_check_generates_only_king_moves() {
+        let game = Game::new(
+            board!(
+                . . . . r . . k
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . b . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                Q . . . K . . .
+            ),
+            Color::White,
+        );
+
+        assert!(game.moves.len() > 0);
+        assert!(game.moves.iter().all(|mve| mve.from == square!(e1)));
+    }
+
+    #[test]
+    fn checked_king_cannot_retreat_on_ray_or_capture_defended_piece() {
+        let ray = Game::new(
+            board!(
+                . . . . r . . k
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . K . . .
+                . . . . . . . .
+            ),
+            Color::White,
+        );
+        let defended = Game::new(
+            board!(
+                . . . . . . . k
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                r . . . r . . .
+                . . . . K . . .
+            ),
+            Color::White,
+        );
+
+        assert!(!has_move(&ray, "e2e1"));
+        assert!(!has_move(&defended, "e1e2"));
     }
 
     #[test]

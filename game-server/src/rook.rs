@@ -10,10 +10,11 @@ pub(super) fn add_rook_moves<const COLOR: Color>(
     board: &Board,
     occupied: Bitboard,
     blockers: Bitboard,
+    evasion_mask: Bitboard,
     list: &mut MoveList,
 ) {
     for from in board.rooks::<COLOR>() {
-        let moves = rook_attacks(from, occupied) & !blockers;
+        let moves = rook_attacks(from, occupied) & !blockers & evasion_mask;
         list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
@@ -21,6 +22,7 @@ pub(super) fn add_rook_moves<const COLOR: Color>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
@@ -36,6 +38,7 @@ mod tests {
             &board,
             board.occupied(),
             board.occupancy::<{ Color::White }>(),
+            Bitboard::FULL,
             &mut moves,
         );
 

@@ -61,6 +61,18 @@ impl Default for Board {
 
 impl Board {
     pub(super) fn from_fen(placement: &str) -> Result<Self> {
+        let board = Self::parse_fen_placement(placement)?;
+
+        if board.king::<{ Color::White }>().len() != 1
+            || board.king::<{ Color::Black }>().len() != 1
+        {
+            bail!("FEN position must contain exactly one king of each color");
+        }
+
+        Ok(board)
+    }
+
+    fn parse_fen_placement(placement: &str) -> Result<Self> {
         let mut board = Self {
             white_pawns: Bitboard::EMPTY,
             white_rooks: Bitboard::EMPTY,
@@ -141,7 +153,7 @@ impl Board {
             }
         }
 
-        Self::from_fen(&fen).expect("board! generated invalid FEN")
+        Self::parse_fen_placement(&fen).expect("board! generated invalid FEN")
     }
 
     pub(super) const fn pawns<const COLOR: Color>(&self) -> Bitboard {
@@ -184,6 +196,13 @@ impl Board {
             Color::White => self.white_king,
             Color::Black => self.black_king,
         }
+    }
+
+    pub(super) fn king_square<const COLOR: Color>(&self) -> Square {
+        let mut king = self.king::<COLOR>();
+        debug_assert_eq!(king.len(), 1);
+
+        unsafe { king.next().unwrap_unchecked() }
     }
 
     pub(super) const fn occupancy<const COLOR: Color>(&self) -> Bitboard {
@@ -399,6 +418,11 @@ mod tests {
             "8/8/8/8/8/8/8/0",
             "8/8/8/8/8/8/8/7X",
             "8/8/8/8/8/8/8/8P",
+            "8/8/8/8/8/8/8/8",
+            "7k/8/8/8/8/8/8/8",
+            "8/8/8/8/8/8/8/4K3",
+            "k6k/8/8/8/8/8/8/4K3",
+            "7k/8/8/8/8/8/8/K6K",
         ] {
             assert!(Board::from_fen(fen).is_err(), "{fen} should be invalid");
         }
