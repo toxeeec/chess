@@ -206,7 +206,7 @@ impl GameState {
                     || black_disconnect_expired
                 {
                     if clock_expired {
-                        *self.remaining_ms_mut(self.game.turn) = 0;
+                        *self.remaining_ms_mut(self.game.state.turn) = 0;
                     }
 
                     self.lifecycle = if self.revision == 0 {
@@ -261,7 +261,7 @@ impl GameState {
         };
         debug_assert!(now >= turn_started_at);
 
-        let moving_color = self.game.turn;
+        let moving_color = self.game.state.turn;
         self.game
             .make_move(color, mve)
             .map_err(MakeMoveError::from)?;
@@ -286,7 +286,7 @@ impl GameState {
     }
 
     fn active_clock_expires_at(&self, turn_started_at: i64) -> i64 {
-        turn_started_at + self.remaining_ms(self.game.turn) as i64
+        turn_started_at + self.remaining_ms(self.game.state.turn) as i64
     }
 
     const fn remaining_ms(&self, color: Color) -> i32 {
@@ -327,6 +327,7 @@ impl fmt::Display for GameLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{castling::CastlingRights, game::State};
 
     const NOW: i64 = 1_000;
     const JOIN_TIMEOUT_MS: i32 = 100;
@@ -366,7 +367,7 @@ mod tests {
             game: Game::new(
                 crate::board::Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR")
                     .unwrap(),
-                Color::Black,
+                State::new(Color::Black, CastlingRights::NONE),
             ),
             revision: 1,
             lifecycle: active_lifecycle(NOW),
@@ -454,7 +455,7 @@ mod tests {
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.clock.black_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.turn_started_at(), Some(NOW + 125));
-        assert_eq!(state.game.turn, Color::Black);
+        assert_eq!(state.game.state.turn, Color::Black);
     }
 
     #[test]
@@ -483,7 +484,7 @@ mod tests {
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
         assert_eq!(state.clock.black_remaining_ms, TIME_CONTROL_MS - 125);
         assert_eq!(state.turn_started_at(), Some(NOW + 125));
-        assert_eq!(state.game.turn, Color::White);
+        assert_eq!(state.game.state.turn, Color::White);
     }
 
     #[test]

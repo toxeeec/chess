@@ -6,6 +6,7 @@ use crate::{
     attacks::{KingThreats, evasion_mask, king_threats},
     bishop::add_bishop_moves,
     board::Board,
+    castling::CastlingRights,
     king::add_king_moves,
     knight::add_knight_moves,
     moves::{Move, MoveList},
@@ -60,21 +61,38 @@ pub(super) enum MakeMoveError {
 
 pub(super) struct Game {
     pub(super) board: Board,
-    pub(super) turn: Color,
+    pub(super) state: State,
     pub(super) moves: MoveList,
+}
+
+pub(super) struct State {
+    pub(super) turn: Color,
+    castling_rights: CastlingRights,
+}
+
+impl State {
+    pub(super) const fn new(turn: Color, castling_rights: CastlingRights) -> Self {
+        Self {
+            turn,
+            castling_rights,
+        }
+    }
 }
 
 impl Default for Game {
     fn default() -> Self {
-        Self::new(Board::default(), Color::White)
+        Self::new(
+            Board::default(),
+            State::new(Color::White, CastlingRights::ALL),
+        )
     }
 }
 
 impl Game {
-    pub(super) fn new(board: Board, turn: Color) -> Self {
+    pub(super) fn new(board: Board, state: State) -> Self {
         let mut game = Self {
             board,
-            turn,
+            state,
             moves: MoveList::default(),
         };
         game.add_moves();
@@ -86,19 +104,26 @@ impl Game {
         let mut fields = fen.split_whitespace();
         let placement = fields.next().context("FEN must contain piece placement")?;
         let active_color = fields.next().context("FEN must contain active color")?;
+        let castling = fields.next().context("FEN must contain castling rights")?;
 
-        Ok(Self::new(
-            Board::from_fen(placement)?,
-            Color::from_fen_value(active_color)?,
-        ))
+        let board = Board::from_fen(placement)?;
+        let turn = Color::from_fen_value(active_color)?;
+        let castling_rights = CastlingRights::from_fen(castling, &board)?;
+
+        Ok(Self::new(board, State::new(turn, castling_rights)))
     }
 
     pub(super) fn fen(&self) -> String {
-        format!("{} {} - - 0 1", self.board.fen(), self.turn.fen_value())
+        format!(
+            "{} {} {} - 0 1",
+            self.board.fen(),
+            self.state.turn.fen_value(),
+            self.state.castling_rights
+        )
     }
 
     pub(super) fn make_move(&mut self, color: Color, mve: Move) -> Result<(), MakeMoveError> {
-        if color != self.turn {
+        if color != self.state.turn {
             return Err(MakeMoveError::NotYourTurn);
         }
 
@@ -106,8 +131,9 @@ impl Game {
             return Err(MakeMoveError::IllegalMove);
         }
 
-        self.board.make_move(self.turn, mve);
-        self.turn = self.turn.opponent();
+        self.state.castling_rights.update(mve.from, mve.to);
+        self.board.make_move(self.state.turn, mve);
+        self.state.turn = self.state.turn.opponent();
 
         self.moves.clear();
         self.add_moves();
@@ -116,7 +142,7 @@ impl Game {
     }
 
     fn add_moves(&mut self) {
-        match self.turn {
+        match self.state.turn {
             Color::White => self.add_moves_for::<{ Color::White }>(),
             Color::Black => self.add_moves_for::<{ Color::Black }>(),
         }
@@ -181,7 +207,15 @@ impl Game {
             );
         }
 
-        add_king_moves::<COLOR>(&self.board, blockers, forbidden, &mut self.moves);
+        add_king_moves::<COLOR>(
+            &self.board,
+            occupied,
+            blockers,
+            attackers,
+            forbidden,
+            self.state.castling_rights,
+            &mut self.moves,
+        );
     }
 }
 
@@ -189,7 +223,7 @@ impl Game {
 mod tests {
     use crate::{square, test_utils::board};
 
-    use super::{Color, Game};
+    use super::{CastlingRights, Color, Game, State};
 
     fn has_move(game: &Game, mve: &str) -> bool {
         game.moves.contains(mve.parse().unwrap())
@@ -198,12 +232,26 @@ mod tests {
     #[test]
     fn parses_white_and_black_active_color() {
         let white = Game::from_fen("7k/8/8/8/8/8/4P3/4K3 w - - 0 1").unwrap();
-        assert_eq!(white.turn, Color::White);
+        assert_eq!(white.state.turn, Color::White);
         assert_eq!(white.fen(), "7k/8/8/8/8/8/4P3/4K3 w - - 0 1");
 
         let black = Game::from_fen("7k/3p4/8/8/8/8/8/4K3 b - - 0 1").unwrap();
-        assert_eq!(black.turn, Color::Black);
+        assert_eq!(black.state.turn, Color::Black);
         assert_eq!(black.fen(), "7k/3p4/8/8/8/8/8/4K3 b - - 0 1");
+    }
+
+    #[test]
+    fn parses_and_serializes_castling_rights() {
+        for rights in ["-", "K", "Q", "k", "q", "KQkq", "qK"] {
+            let game =
+                Game::from_fen(&format!("r3k2r/8/8/8/8/8/8/R3K2R w {rights} - 0 1")).unwrap();
+            let expected = if rights == "qK" { "Kq" } else { rights };
+
+            assert_eq!(
+                game.fen(),
+                format!("r3k2r/8/8/8/8/8/8/R3K2R w {expected} - 0 1")
+            );
+        }
     }
 
     #[test]
@@ -213,6 +261,14 @@ mod tests {
             "8/8/8/8/8/8/8/8",
             "7k/8/8/8/8/8/8/4K3 x - - 0 1",
             "8/8/8/8/8/8/8 w - - 0 1",
+            "7k/8/8/8/8/8/8/4K3 w X - 0 1",
+            "7k/8/8/8/8/8/8/4K3 w KK - 0 1",
+            "7k/8/8/8/8/8/8/3K3R w K - 0 1",
+            "r2k4/8/8/8/8/8/8/7K b q - 0 1",
+            "7k/8/8/8/8/8/8/4K3 w K - 0 1",
+            "7k/8/8/8/8/8/8/4K2R w Q - 0 1",
+            "4k3/8/8/8/8/8/8/7K b k - 0 1",
+            "4k2r/8/8/8/8/8/8/7K b q - 0 1",
         ] {
             assert!(Game::from_fen(fen).is_err(), "{fen} should be invalid");
         }
@@ -230,10 +286,46 @@ mod tests {
 
         assert_eq!(
             game.fen(),
-            "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1"
+            "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
         );
-        assert_eq!(game.turn, Color::Black);
+        assert_eq!(game.state.turn, Color::Black);
         assert_eq!(game.moves.len(), 20);
+    }
+
+    #[test]
+    fn castling_moves_the_rook_and_revokes_the_rights() {
+        let mut game = Game::from_fen("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1").unwrap();
+
+        assert!(
+            game.make_move(Color::White, "e1g1".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(game.fen(), "4k3/8/8/8/8/8/8/R4RK1 b - - 0 1");
+    }
+
+    #[test]
+    fn king_rook_moves_and_home_rook_captures_revoke_rights() {
+        let mut rook = Game::from_fen("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1").unwrap();
+        assert!(
+            rook.make_move(Color::White, "h1h2".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(rook.fen(), "4k3/8/8/8/8/8/7R/R3K3 b Q - 0 1");
+
+        let mut king = Game::from_fen("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1").unwrap();
+        assert!(
+            king.make_move(Color::White, "e1e2".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(king.fen(), "4k3/8/8/8/8/8/4K3/R6R b - - 0 1");
+
+        let mut capture = Game::from_fen("r3k3/8/8/8/8/8/8/R3K3 b Qq - 0 1").unwrap();
+        assert!(
+            capture
+                .make_move(Color::Black, "a8a1".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(capture.fen(), "4k3/8/8/8/8/8/8/r3K3 w - - 0 1");
     }
 
     #[test]
@@ -249,7 +341,7 @@ mod tests {
                 P . . . . . B .
                 . . . R K . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
 
         assert!(has_move(&game, "g2f3"));
@@ -270,7 +362,7 @@ mod tests {
                 P . . R . . . .
                 . . . . K . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
 
         assert!(has_move(&game, "b5e8"));
@@ -291,7 +383,7 @@ mod tests {
                 . . . . . . . .
                 Q . . . K . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
 
         assert!(game.moves.len() > 0);
@@ -311,7 +403,7 @@ mod tests {
                 . . . . K . . .
                 . . . . . . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
         assert!(!has_move(&ray, "e2e1"));
 
@@ -326,7 +418,7 @@ mod tests {
                 r . . . r . . .
                 . . . . K . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
         assert!(!has_move(&defended, "e1e2"));
     }
@@ -344,7 +436,7 @@ mod tests {
                 . . . . R . . .
                 . . . . K . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
         assert!(has_move(&game, "e2e8"));
         assert!(has_move(&game, "e2e3"));
@@ -365,7 +457,7 @@ mod tests {
                 . . . . . . . .
                 K . . . . . . .
             ),
-            Color::White,
+            State::new(Color::White, CastlingRights::NONE),
         );
 
         assert!(
@@ -401,7 +493,10 @@ mod tests {
         ] {
             let mut game = Game::from_fen(fen).unwrap();
 
-            assert!(game.make_move(game.turn, mve.parse().unwrap()).is_ok());
+            assert!(
+                game.make_move(game.state.turn, mve.parse().unwrap())
+                    .is_ok()
+            );
             assert_eq!(game.fen(), expected);
         }
     }
@@ -427,7 +522,7 @@ mod tests {
                 .is_err()
         );
 
-        assert_eq!(game.turn, Color::White);
+        assert_eq!(game.state.turn, Color::White);
         assert_eq!(game.moves.len(), move_count);
     }
 
@@ -441,7 +536,7 @@ mod tests {
                 .is_err()
         );
 
-        assert_eq!(game.turn, Color::White);
+        assert_eq!(game.state.turn, Color::White);
         assert_eq!(game.moves.len(), move_count);
     }
 }

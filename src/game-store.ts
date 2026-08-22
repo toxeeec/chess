@@ -187,6 +187,15 @@ function nextBoard(board: readonly (Piece | undefined)[], move: Move) {
 	const nextBoard = [...board]
 	nextBoard[move.from] = undefined
 	nextBoard[move.to] = move.promotion ? Piece.promote(movingPiece, move.promotion) : movingPiece
+
+	const isCastling =
+		(movingPiece === "K" || movingPiece === "k") && Math.abs(move.from - move.to) === 2
+	if (isCastling) {
+		const rookFrom = move.to > move.from ? move.to + 1 : move.to - 2
+		const rookTo = move.to > move.from ? move.to - 1 : move.to + 1
+		nextBoard[rookTo] = nextBoard[rookFrom]
+		nextBoard[rookFrom] = undefined
+	}
 	return nextBoard
 }
 
@@ -366,5 +375,19 @@ if (import.meta.vitest) {
 
 		expect(store.getState().board[48]).toBeUndefined()
 		expect(store.getState().board[56]).toBe("r")
+	})
+
+	it.concurrent("moves the rook when castling", () => {
+		for (const [fen, move, expected] of [
+			["4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", { from: 60, to: 62 }, { king: 62, rook: 61 }],
+			["4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", { from: 60, to: 58 }, { king: 58, rook: 59 }],
+			["r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", { from: 4, to: 6 }, { king: 6, rook: 5 }],
+			["r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", { from: 4, to: 2 }, { king: 2, rook: 3 }],
+		] as const) {
+			const board = nextBoard(createBoardFromFen(fen), move)
+			expect(board[move.from]).toBeUndefined()
+			expect(board[expected.king]?.toLowerCase()).toBe("k")
+			expect(board[expected.rook]?.toLowerCase()).toBe("r")
+		}
 	})
 }

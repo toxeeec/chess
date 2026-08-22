@@ -1,10 +1,10 @@
 use crate::{
     attacks::PinRays,
-    bitboard,
     bitboard::{Bitboard, Direction},
     board::Board,
     game::Color,
     moves::{Move, MoveList},
+    square::Square,
 };
 
 pub(super) fn add_knight_moves<const COLOR: Color>(
@@ -27,7 +27,7 @@ pub(super) const KNIGHT_ATTACKS: [Bitboard; 64] = {
     let mut square = 0;
 
     while square < 64 {
-        let bb = bitboard!(square);
+        let bb = Bitboard::from(Square::new(square as u32));
         attacks[square] = bb.shift::<{ Direction::Nne }>()
             | bb.shift::<{ Direction::Nnw }>()
             | bb.shift::<{ Direction::Nee }>()

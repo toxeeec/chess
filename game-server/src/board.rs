@@ -227,9 +227,29 @@ impl Board {
     }
 
     pub(super) fn make_move(&mut self, color: Color, mve: Move) {
+        const CASTLING_ROOK_MOVES: [[(Square, Square); 2]; 2] = [
+            [(square!(a1), square!(d1)), (square!(h1), square!(f1))],
+            [(square!(a8), square!(d8)), (square!(h8), square!(f8))],
+        ];
+
+        let king = match color {
+            Color::White => self.white_king,
+            Color::Black => self.black_king,
+        };
+        let is_castling = king.contains(mve.from) & (mve.from.file().abs_diff(mve.to.file()) == 2);
+
         self.for_each_bb_mut(|piece| {
             piece.apply_move(mve.from, mve.to);
         });
+
+        if is_castling {
+            let king_side = (mve.to.file() > mve.from.file()) as usize;
+            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color as usize][king_side];
+            match color {
+                Color::White => self.white_rooks.apply_move(rook_from, rook_to),
+                Color::Black => self.black_rooks.apply_move(rook_from, rook_to),
+            }
+        }
 
         if let Some(promotion) = mve.promotion {
             self.promote(color, promotion, mve.to);

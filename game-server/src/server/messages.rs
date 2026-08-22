@@ -131,7 +131,7 @@ impl Clock {
 
         debug_assert!(now >= turn_started_at);
         let elapsed_ms = (now - turn_started_at) as i32;
-        match state.game.turn {
+        match state.game.state.turn {
             Color::White => Self {
                 white_remaining_ms: state
                     .clock
@@ -207,7 +207,7 @@ impl MoveMessage {
         Self {
             revision,
             mve: mve.to_string(),
-            turn: game.turn,
+            turn: game.state.turn,
             legal_moves: game.moves.to_string(),
             clock,
         }
@@ -219,7 +219,8 @@ mod tests {
     use super::*;
     use crate::{
         board::Board,
-        game::Game,
+        castling::CastlingRights,
+        game::{Game, State},
         game_state::{GameClock, GameLifecycle, GameTimeouts},
     };
 
@@ -264,7 +265,7 @@ mod tests {
         let state = GameState {
             game: Game::new(
                 Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR").unwrap(),
-                Color::Black,
+                State::new(Color::Black, CastlingRights::NONE),
             ),
             revision: 1,
             timeouts: TEST_TIMEOUTS,
@@ -291,7 +292,7 @@ mod tests {
         let state = GameState {
             game: Game::new(
                 Board::from_fen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR").unwrap(),
-                Color::Black,
+                State::new(Color::Black, CastlingRights::NONE),
             ),
             revision: 1,
             timeouts: TEST_TIMEOUTS,

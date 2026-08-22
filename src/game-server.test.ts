@@ -214,7 +214,7 @@ describe("GameServer", () => {
 		await expect(newConnection.readMessage()).resolves.toEqual(
 			snapshotMessageMatcher({
 				revision: 1,
-				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1",
+				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
 				status: "ended",
 				clock: { blackRemainingMs: 0, running: false },
 				legalMoves: "",
@@ -328,7 +328,7 @@ describe("GameServer", () => {
 		await expect(connection.readMessage()).resolves.toEqual(
 			snapshotMessageMatcher({
 				revision: 0,
-				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
 				status: "waiting",
 				legalMoves: "",
 			}),
@@ -376,7 +376,7 @@ describe("GameServer", () => {
 		await expect(newConnection.readMessage()).resolves.toEqual(
 			snapshotMessageMatcher({
 				revision: 1,
-				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b - - 0 1",
+				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
 				status: "active",
 				clock: { running: true },
 				legalMoves: expect.any(String),
@@ -401,7 +401,7 @@ describe("GameServer", () => {
 		await expect(blackConnection.readMessage()).resolves.toEqual(
 			snapshotMessageMatcher({
 				revision: 0,
-				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
 				status: "expired",
 				clock: { running: false },
 				legalMoves: "",
@@ -424,7 +424,7 @@ describe("GameServer", () => {
 		await expect(newConnection.readMessage()).resolves.toEqual(
 			snapshotMessageMatcher({
 				revision: 0,
-				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+				fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
 				status: "expired",
 				clock: { running: false },
 				legalMoves: "",

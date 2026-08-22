@@ -1,20 +1,25 @@
 use crate::{
-    bitboard,
     bitboard::{Bitboard, Direction},
     board::Board,
+    castling::{CastlingRights, add_castling_moves},
     game::Color,
     moves::{Move, MoveList},
+    square::Square,
 };
 
 pub(super) fn add_king_moves<const COLOR: Color>(
     board: &Board,
+    occupied: Bitboard,
     blockers: Bitboard,
+    attackers: Bitboard,
     forbidden: Bitboard,
+    castling_rights: CastlingRights,
     list: &mut MoveList,
 ) {
     let from = board.king_square::<COLOR>();
     let moves = KING_ATTACKS[from] & !(blockers | forbidden);
     list.extend(moves.map(|to| Move::new(from, to, None)));
+    add_castling_moves::<COLOR>(board, occupied, attackers, forbidden, castling_rights, list);
 }
 
 pub(super) const KING_ATTACKS: [Bitboard; 64] = {
@@ -22,7 +27,7 @@ pub(super) const KING_ATTACKS: [Bitboard; 64] = {
     let mut square = 0;
 
     while square < 64 {
-        let bb = bitboard!(square);
+        let bb = Bitboard::from(Square::new(square as u32));
         attacks[square] = bb.shift::<{ Direction::North }>()
             | bb.shift::<{ Direction::South }>()
             | bb.shift::<{ Direction::East }>()
@@ -42,6 +47,7 @@ mod tests {
     use crate::{
         attacks::king_threats,
         board::Board,
+        castling::CastlingRights,
         game::Color,
         moves::MoveList,
         test_utils::{MoveCase, assert_move_cases, board, moves},
@@ -56,8 +62,11 @@ mod tests {
 
         add_king_moves::<{ Color::White }>(
             &board,
+            occupied,
             board.occupancy::<{ Color::White }>(),
+            king_threats::<{ Color::Black }>(&board, occupied).attackers,
             forbidden,
+            CastlingRights::NONE,
             &mut moves,
         );
 

@@ -1,7 +1,7 @@
 use std::{
     fmt,
     marker::ConstParamTy,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, Not, Shl, Shr},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, IndexMut, Not, Shl, Shr},
 };
 
 use crate::{game::Color, square::Square};
@@ -27,22 +27,6 @@ pub(super) enum Direction {
     Ssw,
     See,
     Sww,
-}
-
-#[macro_export]
-macro_rules! bitboard {
-    ($square: expr) => {{
-        let square = $square;
-        debug_assert!((0..64).contains(&square));
-        $crate::bitboard::Bitboard::from($crate::square::Square::new(square as u32))
-    }};
-
-    ($($square: expr),* $(,)?) => {
-        $crate::bitboard::Bitboard::from([$({
-            debug_assert!((0..64).contains(&$square));
-            $crate::square::Square::new($square as u32)
-        },)*])
-    };
 }
 
 impl Bitboard {
@@ -144,12 +128,14 @@ const impl From<Square> for Bitboard {
     }
 }
 
-impl<const N: usize> From<[Square; N]> for Bitboard {
+const impl<const N: usize> From<[Square; N]> for Bitboard {
     fn from(squares: [Square; N]) -> Self {
         let mut bitboard = Self::EMPTY;
+        let mut i = 0;
 
-        for square in squares {
-            bitboard |= square;
+        while i < N {
+            bitboard = bitboard | Self::from(squares[i]);
+            i += 1;
         }
 
         bitboard
@@ -258,8 +244,8 @@ impl Iterator for Bitboard {
 impl ExactSizeIterator for Bitboard {}
 unsafe impl std::iter::TrustedLen for Bitboard {}
 
-impl Index<Square> for [Bitboard; 64] {
-    type Output = Bitboard;
+const impl<T> Index<Square> for [T; 64] {
+    type Output = T;
 
     fn index(&self, square: Square) -> &Self::Output {
         let square = usize::from(square);
@@ -267,11 +253,9 @@ impl Index<Square> for [Bitboard; 64] {
     }
 }
 
-impl Index<Square> for [[Bitboard; 64]; 64] {
-    type Output = [Bitboard; 64];
-
-    fn index(&self, square: Square) -> &Self::Output {
+const impl<T> IndexMut<Square> for [T; 64] {
+    fn index_mut(&mut self, square: Square) -> &mut Self::Output {
         let square = usize::from(square);
-        unsafe { self.get_unchecked(square) }
+        unsafe { self.get_unchecked_mut(square) }
     }
 }

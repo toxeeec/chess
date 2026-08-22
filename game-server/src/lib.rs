@@ -3,8 +3,8 @@
     adt_const_params,
     const_trait_impl,
     const_convert,
+    const_index,
     const_ops,
-    const_range,
     generic_const_exprs,
     trusted_len
 )]
@@ -13,6 +13,7 @@ mod attacks;
 mod bishop;
 mod bitboard;
 mod board;
+mod castling;
 mod game;
 mod game_state;
 mod game_storage;
