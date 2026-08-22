@@ -112,26 +112,37 @@ pub(super) struct MoveCase {
     pub(super) moves: MoveList,
 }
 
+pub(super) fn assert_move_case(case: MoveCase, generate_moves: impl FnOnce(Board) -> MoveList) {
+    let MoveCase {
+        name,
+        board,
+        moves: expected,
+    } = case;
+    assert_generated_moves(name, &expected, generate_moves(board));
+}
+
 pub(super) fn assert_move_cases<const N: usize>(
     cases: [MoveCase; N],
     generate_moves: impl Fn(Board) -> MoveList,
 ) {
     for case in cases {
-        let moves = generate_moves(case.board);
+        assert_move_case(case, &generate_moves);
+    }
+}
 
-        assert_eq!(
-            moves.len(),
-            case.moves.len(),
-            "{}: wrong move count; got {moves}",
-            case.name
+fn assert_generated_moves(name: &str, expected: &MoveList, actual: MoveList) {
+    assert_eq!(
+        actual.len(),
+        expected.len(),
+        "{}: wrong move count; got {actual}",
+        name
+    );
+
+    for expected in expected.iter() {
+        assert!(
+            actual.contains(expected),
+            "{}: missing move {expected}; got {actual}",
+            name
         );
-
-        for expected in case.moves.iter() {
-            assert!(
-                moves.contains(expected),
-                "{}: missing move {expected}; got {moves}",
-                case.name
-            );
-        }
     }
 }

@@ -134,18 +134,33 @@ impl Game {
         let KingThreats {
             attackers,
             forbidden,
+            pin_rays,
         } = king_threats::<{ !COLOR }>(&self.board, occupied);
 
         let evasion_mask = evasion_mask(self.board.king_square::<COLOR>(), attackers);
 
         if !evasion_mask.empty() {
-            add_pawn_moves::<COLOR>(&self.board, empty, enemy, evasion_mask, &mut self.moves);
-            add_knight_moves::<COLOR>(&self.board, blockers, evasion_mask, &mut self.moves);
+            add_pawn_moves::<COLOR>(
+                &self.board,
+                empty,
+                enemy,
+                evasion_mask,
+                pin_rays,
+                &mut self.moves,
+            );
+            add_knight_moves::<COLOR>(
+                &self.board,
+                blockers,
+                evasion_mask,
+                pin_rays,
+                &mut self.moves,
+            );
             add_bishop_moves::<COLOR>(
                 &self.board,
                 occupied,
                 blockers,
                 evasion_mask,
+                pin_rays,
                 &mut self.moves,
             );
             add_rook_moves::<COLOR>(
@@ -153,6 +168,7 @@ impl Game {
                 occupied,
                 blockers,
                 evasion_mask,
+                pin_rays,
                 &mut self.moves,
             );
             add_queen_moves::<COLOR>(
@@ -160,6 +176,7 @@ impl Game {
                 occupied,
                 blockers,
                 evasion_mask,
+                pin_rays,
                 &mut self.moves,
             );
         }
@@ -181,10 +198,10 @@ mod tests {
     #[test]
     fn parses_white_and_black_active_color() {
         let white = Game::from_fen("7k/8/8/8/8/8/4P3/4K3 w - - 0 1").unwrap();
-        let black = Game::from_fen("7k/3p4/8/8/8/8/8/4K3 b - - 0 1").unwrap();
-
         assert_eq!(white.turn, Color::White);
         assert_eq!(white.fen(), "7k/8/8/8/8/8/4P3/4K3 w - - 0 1");
+
+        let black = Game::from_fen("7k/3p4/8/8/8/8/8/4K3 b - - 0 1").unwrap();
         assert_eq!(black.turn, Color::Black);
         assert_eq!(black.fen(), "7k/3p4/8/8/8/8/8/4K3 b - - 0 1");
     }
@@ -296,6 +313,8 @@ mod tests {
             ),
             Color::White,
         );
+        assert!(!has_move(&ray, "e2e1"));
+
         let defended = Game::new(
             board!(
                 . . . . . . . k
@@ -309,14 +328,45 @@ mod tests {
             ),
             Color::White,
         );
-
-        assert!(!has_move(&ray, "e2e1"));
         assert!(!has_move(&defended, "e1e2"));
     }
 
     #[test]
+    fn pin_detection_restricts_moves_to_the_pin_ray() {
+        let game = Game::new(
+            board!(
+                . . . . r . . k
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . R . . .
+                . . . . K . . .
+            ),
+            Color::White,
+        );
+        assert!(has_move(&game, "e2e8"));
+        assert!(has_move(&game, "e2e3"));
+        assert!(!has_move(&game, "e2d2"));
+        assert!(!has_move(&game, "e2f2"));
+    }
+
+    #[test]
     fn pawn_capture_removes_captured_piece() {
-        let mut game = Game::from_fen("7k/8/8/3p4/4P3/8/8/K7 w - - 0 1").unwrap();
+        let mut game = Game::new(
+            board!(
+                . . . . . . . k
+                . . . . . . . .
+                . . . . . . . .
+                . . . p . . . .
+                . . . . P . . .
+                . . . . . . . .
+                . . . . . . . .
+                K . . . . . . .
+            ),
+            Color::White,
+        );
 
         assert!(
             game.make_move(Color::White, "e4d5".parse().unwrap())

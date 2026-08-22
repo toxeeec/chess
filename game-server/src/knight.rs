@@ -1,4 +1,5 @@
 use crate::{
+    attacks::PinRays,
     bitboard,
     bitboard::{Bitboard, Direction},
     board::Board,
@@ -10,9 +11,10 @@ pub(super) fn add_knight_moves<const COLOR: Color>(
     board: &Board,
     blockers: Bitboard,
     evasion_mask: Bitboard,
+    pin_rays: PinRays,
     list: &mut MoveList,
 ) {
-    let knights = board.knights::<COLOR>();
+    let knights = board.knights::<COLOR>() & !pin_rays.pinned_pieces(blockers);
 
     for from in knights {
         let moves = KNIGHT_ATTACKS[from] & !blockers & evasion_mask;
@@ -43,22 +45,25 @@ pub(super) const KNIGHT_ATTACKS: [Bitboard; 64] = {
 #[cfg(test)]
 mod tests {
     use crate::{
+        attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
-        test_utils::{MoveCase, assert_move_cases, board, moves},
+        squares,
+        test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 
     use super::add_knight_moves;
 
-    fn knight_moves(board: Board) -> MoveList {
+    fn knight_moves(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
 
         add_knight_moves::<{ Color::White }>(
             &board,
             board.occupancy::<{ Color::White }>(),
             Bitboard::FULL,
+            pin_rays,
             &mut moves,
         );
 
@@ -139,7 +144,39 @@ mod tests {
                     ),
                 },
             ],
-            knight_moves,
+            |board| knight_moves(board, PinRays::EMPTY),
+        );
+    }
+
+    #[test]
+    fn excludes_pinned_knights() {
+        let pin_rays = PinRays::orthogonal(Bitboard::from(squares![e2, e3, e4, e5, e6, e7, e8]));
+
+        assert_move_case(
+            MoveCase {
+                name: "pinned knight",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . N . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . o . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| knight_moves(board, pin_rays),
         );
     }
 }

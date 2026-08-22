@@ -11,6 +11,41 @@ use crate::{
 pub(super) struct KingThreats {
     pub(super) attackers: Bitboard,
     pub(super) forbidden: Bitboard,
+    pub(super) pin_rays: PinRays,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PinRays {
+    pub(super) diagonal: Bitboard,
+    pub(super) orthogonal: Bitboard,
+}
+
+impl PinRays {
+    #[cfg(test)]
+    pub(super) const EMPTY: Self = Self {
+        diagonal: Bitboard::EMPTY,
+        orthogonal: Bitboard::EMPTY,
+    };
+
+    pub(super) fn pinned_pieces(self, pieces: Bitboard) -> Bitboard {
+        (self.diagonal | self.orthogonal) & pieces
+    }
+
+    #[cfg(test)]
+    pub(super) const fn diagonal(ray: Bitboard) -> Self {
+        Self {
+            diagonal: ray,
+            orthogonal: Bitboard::EMPTY,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) const fn orthogonal(ray: Bitboard) -> Self {
+        Self {
+            diagonal: Bitboard::EMPTY,
+            orthogonal: ray,
+        }
+    }
 }
 
 pub(super) fn king_threats<const ENEMY: Color>(board: &Board, occupied: Bitboard) -> KingThreats
@@ -19,16 +54,21 @@ where
 {
     let king = board.king::<{ !ENEMY }>();
     let king_square = board.king_square::<{ !ENEMY }>();
+    let blockers = board.occupancy::<{ !ENEMY }>();
     let occupied = occupied & !king;
+
     let diagonal_sliders = board.bishops::<ENEMY>() | board.queens::<ENEMY>();
     let orthogonal_sliders = board.rooks::<ENEMY>() | board.queens::<ENEMY>();
+    let diagonal_attacks = bishop_attacks(king_square, occupied);
+    let orthogonal_attacks = rook_attacks(king_square, occupied);
+
     let pawn_attackers = (king.forward_west::<{ !ENEMY }>() | king.forward_east::<{ !ENEMY }>())
         & board.pawns::<ENEMY>();
-
     let attackers = pawn_attackers
         | (KNIGHT_ATTACKS[king_square] & board.knights::<ENEMY>())
-        | (bishop_attacks(king_square, occupied) & diagonal_sliders)
-        | (rook_attacks(king_square, occupied) & orthogonal_sliders);
+        | (diagonal_attacks & diagonal_sliders)
+        | (orthogonal_attacks & orthogonal_sliders);
+
     let pawns = board.pawns::<ENEMY>();
     let mut forbidden = pawns.forward_west::<ENEMY>() | pawns.forward_east::<ENEMY>();
 
@@ -45,9 +85,29 @@ where
         forbidden |= KING_ATTACKS[square];
     }
 
+    let diagonal_blockers = diagonal_attacks & blockers;
+    let orthogonal_blockers = orthogonal_attacks & blockers;
+    let diagonal_pinners =
+        bishop_attacks(king_square, occupied & !diagonal_blockers) & diagonal_sliders;
+    let orthogonal_pinners =
+        rook_attacks(king_square, occupied & !orthogonal_blockers) & orthogonal_sliders;
+    let mut diagonal_pins = Bitboard::EMPTY;
+    let mut orthogonal_pins = Bitboard::EMPTY;
+
+    for pinner in diagonal_pinners {
+        diagonal_pins |= RAY_MASKS[king_square][pinner];
+    }
+    for pinner in orthogonal_pinners {
+        orthogonal_pins |= RAY_MASKS[king_square][pinner];
+    }
+
     KingThreats {
         attackers,
         forbidden,
+        pin_rays: PinRays {
+            diagonal: diagonal_pins,
+            orthogonal: orthogonal_pins,
+        },
     }
 }
 
@@ -61,10 +121,10 @@ pub(super) fn evasion_mask(king: Square, mut attackers: Bitboard) -> Bitboard {
 
     let attacker = unsafe { attackers.next().unwrap_unchecked() };
 
-    EVASION_MASKS[king][attacker]
+    RAY_MASKS[king][attacker]
 }
 
-static EVASION_MASKS: [[Bitboard; 64]; 64] = {
+static RAY_MASKS: [[Bitboard; 64]; 64] = {
     let mut masks = [[Bitboard::EMPTY; 64]; 64];
     let mut from = 0;
 
@@ -106,14 +166,12 @@ static EVASION_MASKS: [[Bitboard; 64]; 64] = {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        bitboard::Bitboard, board::Board, game::Color, square, squares, test_utils::board,
-    };
+    use crate::{bitboard::Bitboard, game::Color, square, squares, test_utils::board};
 
-    use super::{EVASION_MASKS, king_threats};
+    use super::{RAY_MASKS, king_threats};
 
     #[test]
-    fn evasion_masks_include_attacker_and_intermediate_squares() {
+    fn ray_masks_include_destination_and_intermediate_squares() {
         for (from, to, expected) in [
             (
                 square!(a1),
@@ -138,61 +196,113 @@ mod tests {
             (square!(a1), square!(a2), Bitboard::from(square!(a2))),
             (square!(a1), square!(c2), Bitboard::from(square!(c2))),
         ] {
-            assert_eq!(EVASION_MASKS[from][to], expected);
+            assert_eq!(RAY_MASKS[from][to], expected);
         }
     }
 
     #[test]
-    fn king_attackers_find_pawns_for_each_color() {
-        let white = Board::from_fen("7k/8/8/3p4/4K3/8/8/8").unwrap();
-        let black = Board::from_fen("8/8/8/4k3/3P4/8/8/7K").unwrap();
+    fn king_attackers_find_every_piece_type() {
+        let board = board!(
+            . . . . r . . k
+            . . . . . . . q
+            . . . . . . . .
+            . . n p . . . .
+            q . . . K . . .
+            . . . . . . . .
+            . . . . . . . .
+            . b . . . . . .
+        );
 
         assert_eq!(
-            king_threats::<{ Color::Black }>(&white, white.occupied()).attackers,
-            Bitboard::from(square!(d5))
+            king_threats::<{ Color::Black }>(&board, board.occupied()).attackers,
+            Bitboard::from(squares![b1, a4, c5, d5, e8, h7])
         );
-        assert_eq!(
-            king_threats::<{ Color::White }>(&black, black.occupied()).attackers,
-            Bitboard::from(square!(d4))
-        );
-    }
-
-    #[test]
-    fn king_attackers_find_knights_and_sliders() {
-        for (placement, expected) in [
-            ("7k/8/8/2n5/4K3/8/8/8", square!(c5)),
-            ("b6k/8/8/8/4K3/8/8/8", square!(a8)),
-            ("4r2k/8/8/8/4K3/8/8/8", square!(e8)),
-            ("7k/7q/8/8/4K3/8/8/8", square!(h7)),
-            ("7k/8/8/8/q3K3/8/8/8", square!(a4)),
-        ] {
-            let board = Board::from_fen(placement).unwrap();
-            assert_eq!(
-                king_threats::<{ Color::Black }>(&board, board.occupied()).attackers,
-                Bitboard::from(expected),
-                "failed for {placement}"
-            );
-        }
     }
 
     #[test]
     fn king_attackers_respect_blockers_and_preserve_multiple_attackers() {
-        let blocked = Board::from_fen("b6k/8/2p5/8/4K3/8/8/8").unwrap();
-        let double = Board::from_fen("4r2k/8/8/2n5/4K3/8/8/8").unwrap();
-        let quiet = Board::from_fen("7k/8/8/8/4K3/8/8/8").unwrap();
-
+        let blocked = board!(
+            b . . . . . . k
+            . . . . . . . .
+            . . p . . . . .
+            . . . . . . . .
+            . . . . K . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+        );
         assert_eq!(
             king_threats::<{ Color::Black }>(&blocked, blocked.occupied()).attackers,
             Bitboard::EMPTY
+        );
+
+        let double = board!(
+            . . . . r . . k
+            . . . . . . . .
+            . . . . . . . .
+            . . n . . . . .
+            . . . . K . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
         );
         assert_eq!(
             king_threats::<{ Color::Black }>(&double, double.occupied()).attackers,
             Bitboard::from(squares![e8, c5])
         );
+
+        let quiet = board!(
+            . . . . . . . k
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . K . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+        );
         assert_eq!(
             king_threats::<{ Color::Black }>(&quiet, quiet.occupied()).attackers,
             Bitboard::EMPTY
         );
+    }
+
+    #[test]
+    fn king_threats_collect_pin_rays_by_slider_type() {
+        let board = board!(
+            . . . . r . . k
+            . . . . . . . .
+            . . . . . . . .
+            b . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . B R . . .
+            . . . . K . . .
+        );
+        let threats = king_threats::<{ Color::Black }>(&board, board.occupied());
+
+        assert_eq!(
+            threats.pin_rays.diagonal,
+            Bitboard::from(squares![d2, c3, b4, a5])
+        );
+        assert_eq!(
+            threats.pin_rays.orthogonal,
+            Bitboard::from(squares![e2, e3, e4, e5, e6, e7, e8])
+        );
+
+        let double_blocked = board!(
+            . . . . r . . k
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . B . . .
+            . . . . R . . .
+            . . . . K . . .
+        );
+        let threats = king_threats::<{ Color::Black }>(&double_blocked, double_blocked.occupied());
+
+        assert_eq!(threats.pin_rays.orthogonal, Bitboard::EMPTY);
     }
 
     #[test]

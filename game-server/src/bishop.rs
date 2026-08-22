@@ -1,4 +1,5 @@
 use crate::{
+    attacks::PinRays,
     bitboard::Bitboard,
     board::Board,
     game::Color,
@@ -11,10 +12,19 @@ pub(super) fn add_bishop_moves<const COLOR: Color>(
     occupied: Bitboard,
     blockers: Bitboard,
     evasion_mask: Bitboard,
+    pin_rays: PinRays,
     list: &mut MoveList,
 ) {
-    for from in board.bishops::<COLOR>() {
-        let moves = bishop_attacks(from, occupied) & !blockers & evasion_mask;
+    let bishops = board.bishops::<COLOR>();
+    let pinned = pin_rays.pinned_pieces(blockers);
+    let targets = !blockers & evasion_mask;
+
+    for from in bishops & !pinned {
+        let moves = bishop_attacks(from, occupied) & targets;
+        list.extend(moves.map(|to| Move::new(from, to, None)));
+    }
+    for from in bishops & pin_rays.diagonal {
+        let moves = bishop_attacks(from, occupied) & targets & pin_rays.diagonal;
         list.extend(moves.map(|to| Move::new(from, to, None)));
     }
 }
@@ -22,16 +32,18 @@ pub(super) fn add_bishop_moves<const COLOR: Color>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
-        test_utils::{MoveCase, assert_move_cases, board, moves},
+        squares,
+        test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 
     use super::add_bishop_moves;
 
-    fn bishop_moves(board: Board) -> MoveList {
+    fn bishop_moves(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
 
         add_bishop_moves::<{ Color::White }>(
@@ -39,6 +51,7 @@ mod tests {
             board.occupied(),
             board.occupancy::<{ Color::White }>(),
             Bitboard::FULL,
+            pin_rays,
             &mut moves,
         );
 
@@ -96,7 +109,71 @@ mod tests {
                     ),
                 },
             ],
-            bishop_moves,
+            |board| bishop_moves(board, PinRays::EMPTY),
+        );
+    }
+
+    #[test]
+    fn allows_bishops_to_move_along_diagonal_pin_rays() {
+        let pin_rays = PinRays::diagonal(Bitboard::from(squares![d3, e4, f5, g6, h7]));
+
+        assert_move_case(
+            MoveCase {
+                name: "diagonally pinned bishop",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . B . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . x
+                    . . . . . . x .
+                    . . . . . o . .
+                    . . . . x . . .
+                    . . . x . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| bishop_moves(board, pin_rays),
+        );
+    }
+
+    #[test]
+    fn excludes_orthogonally_pinned_bishops() {
+        let pin_rays = PinRays::orthogonal(Bitboard::from(squares![e2, e3, e4, e5, e6, e7, e8]));
+
+        assert_move_case(
+            MoveCase {
+                name: "orthogonally pinned bishop",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . B . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . o . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| bishop_moves(board, pin_rays),
         );
     }
 }

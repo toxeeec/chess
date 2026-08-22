@@ -1,4 +1,5 @@
 use crate::{
+    attacks::PinRays,
     bitboard::Bitboard,
     board::Board,
     game::Color,
@@ -10,26 +11,40 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
     empty: Bitboard,
     enemies: Bitboard,
     evasion_mask: Bitboard,
+    pin_rays: PinRays,
     list: &mut MoveList,
 ) {
     let pawns = board.pawns::<COLOR>();
+    let pinned = pin_rays.pinned_pieces(pawns);
+    let unpinned = pawns & !pinned;
+    let diagonal = pawns & pin_rays.diagonal;
+    let orthogonal = pawns & pin_rays.orthogonal;
     let promotion_rank = Bitboard::relative_rank::<COLOR>(8);
 
-    let single_pushes = pawns.forward::<COLOR, 1>() & empty & !promotion_rank;
+    let pushes = (unpinned.forward::<COLOR, 1>()
+        | (orthogonal.forward::<COLOR, 1>() & pin_rays.orthogonal))
+        & empty;
+    let single_pushes = pushes & !promotion_rank;
     let double_pushes = ((single_pushes & Bitboard::relative_rank::<COLOR>(3))
         .forward::<COLOR, 1>())
         & empty
         & evasion_mask;
     let single_pushes = single_pushes & evasion_mask;
 
-    let west_captures = pawns.forward_west::<COLOR>() & enemies & !promotion_rank & evasion_mask;
-    let east_captures = pawns.forward_east::<COLOR>() & enemies & !promotion_rank & evasion_mask;
+    let west_captures = (unpinned.forward_west::<COLOR>()
+        | (diagonal.forward_west::<COLOR>() & pin_rays.diagonal))
+        & enemies
+        & evasion_mask;
+    let east_captures = (unpinned.forward_east::<COLOR>()
+        | (diagonal.forward_east::<COLOR>() & pin_rays.diagonal))
+        & enemies
+        & evasion_mask;
+    let west_capture_promotions = west_captures & promotion_rank;
+    let east_capture_promotions = east_captures & promotion_rank;
+    let west_captures = west_captures & !promotion_rank;
+    let east_captures = east_captures & !promotion_rank;
 
-    let quiet_promotions = pawns.forward::<COLOR, 1>() & empty & promotion_rank & evasion_mask;
-    let west_capture_promotions =
-        pawns.forward_west::<COLOR>() & enemies & promotion_rank & evasion_mask;
-    let east_capture_promotions =
-        pawns.forward_east::<COLOR>() & enemies & promotion_rank & evasion_mask;
+    let quiet_promotions = pushes & promotion_rank & evasion_mask;
 
     list.extend(
         single_pushes
@@ -55,16 +70,18 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
         game::Color,
         moves::MoveList,
-        test_utils::{MoveCase, assert_move_cases, board, moves},
+        squares,
+        test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 
     use super::add_pawn_moves;
 
-    fn pawn_moves<const COLOR: Color>(board: Board) -> MoveList {
+    fn pawn_moves<const COLOR: Color>(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
         let blockers = board.occupancy::<COLOR>();
         let occupied = board.occupied();
@@ -74,6 +91,7 @@ mod tests {
             !occupied,
             occupied & !blockers,
             Bitboard::FULL,
+            pin_rays,
             &mut moves,
         );
 
@@ -177,7 +195,7 @@ mod tests {
                     ),
                 },
             ],
-            pawn_moves::<{ Color::White }>,
+            |board| pawn_moves::<{ Color::White }>(board, PinRays::EMPTY),
         );
     }
 
@@ -278,33 +296,25 @@ mod tests {
                     ),
                 },
             ],
-            pawn_moves::<{ Color::Black }>,
+            |board| pawn_moves::<{ Color::Black }>(board, PinRays::EMPTY),
         );
     }
 
     #[test]
     fn generates_all_quiet_and_capture_promotions() {
-        let white = pawn_moves::<{ Color::White }>(board!(
-            r . n . . . . .
-            . P . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-        ));
-        let black = pawn_moves::<{ Color::Black }>(board!(
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . . .
-            . . . . . . p .
-            . . . . . B . R
-        ));
-
+        let white = pawn_moves::<{ Color::White }>(
+            board!(
+                r . n . . . . .
+                . P . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+            ),
+            PinRays::EMPTY,
+        );
         assert_eq!(
             white.iter().map(|mve| mve.to_string()).collect::<Vec<_>>(),
             [
@@ -312,12 +322,154 @@ mod tests {
                 "b7c8r", "b7c8b", "b7c8n",
             ]
         );
+
+        let black = pawn_moves::<{ Color::Black }>(
+            board!(
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . p .
+                . . . . . B . R
+            ),
+            PinRays::EMPTY,
+        );
         assert_eq!(
             black.iter().map(|mve| mve.to_string()).collect::<Vec<_>>(),
             [
                 "g2g1q", "g2g1r", "g2g1b", "g2g1n", "g2f1q", "g2f1r", "g2f1b", "g2f1n", "g2h1q",
                 "g2h1r", "g2h1b", "g2h1n",
             ]
+        );
+    }
+
+    #[test]
+    fn allows_file_pinned_white_pawns_to_push() {
+        let pin_rays = PinRays::orthogonal(Bitboard::from(squares![e2, e3, e4, e5, e6, e7, e8]));
+
+        assert_move_case(
+            MoveCase {
+                name: "file-pinned white pawn",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . P . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . x . . .
+                    . . . . x . . .
+                    . . . . o . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| pawn_moves::<{ Color::White }>(board, pin_rays),
+        );
+    }
+
+    #[test]
+    fn allows_diagonally_pinned_white_pawns_to_capture() {
+        let pin_rays = PinRays::diagonal(Bitboard::from(squares![c2, d3, e4]));
+
+        assert_move_case(
+            MoveCase {
+                name: "diagonally pinned white pawn",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . b . . .
+                    . . . P . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . x . . .
+                    . . . o . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| pawn_moves::<{ Color::White }>(board, pin_rays),
+        );
+    }
+
+    #[test]
+    fn allows_file_pinned_black_pawns_to_push() {
+        let pin_rays = PinRays::orthogonal(Bitboard::from(squares![e1, e2, e3, e4, e5, e6, e7]));
+
+        assert_move_case(
+            MoveCase {
+                name: "file-pinned black pawn",
+                board: board!(
+                    . . . . . . . .
+                    . . . . p . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . o . . .
+                    . . . . x . . .
+                    . . . . x . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| pawn_moves::<{ Color::Black }>(board, pin_rays),
+        );
+    }
+
+    #[test]
+    fn allows_diagonally_pinned_black_pawns_to_capture() {
+        let pin_rays = PinRays::diagonal(Bitboard::from(squares![c7, d6, e5]));
+
+        assert_move_case(
+            MoveCase {
+                name: "diagonally pinned black pawn",
+                board: board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . p . . . .
+                    . . . . B . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                moves: moves!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . o . . . .
+                    . . . . x . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+            },
+            |board| pawn_moves::<{ Color::Black }>(board, pin_rays),
         );
     }
 }
