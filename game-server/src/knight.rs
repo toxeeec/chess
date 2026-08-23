@@ -2,9 +2,9 @@ use crate::{
     attacks::PinRays,
     bitboard::{Bitboard, Direction},
     board::Board,
-    game::Color,
     moves::{Move, MoveList},
     square::Square,
+    state::Color,
 };
 
 pub(super) fn add_knight_moves<const COLOR: Color>(
@@ -48,9 +48,9 @@ mod tests {
         attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
-        game::Color,
         moves::MoveList,
         squares,
+        state::Color,
         test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 

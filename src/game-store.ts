@@ -2,6 +2,7 @@ import { createContext, use, useSyncExternalStore } from "react"
 
 import { Piece } from "./piece"
 import type { Player } from "./room"
+import { Square } from "./square"
 import type { Clock, Move } from "./use-live-room"
 
 type GameStore = ReturnType<typeof createGameStore>
@@ -186,6 +187,16 @@ function nextBoard(board: readonly (Piece | undefined)[], move: Move) {
 
 	const nextBoard = [...board]
 	nextBoard[move.from] = undefined
+
+	const isEnPassant =
+		(movingPiece === "P" || movingPiece === "p") &&
+		Square.file(move.from) !== Square.file(move.to) &&
+		board[move.to] === undefined
+	if (isEnPassant) {
+		const captured = move.from - Square.file(move.from) + Square.file(move.to)
+		nextBoard[captured] = undefined
+	}
+
 	nextBoard[move.to] = move.promotion ? Piece.promote(movingPiece, move.promotion) : movingPiece
 
 	const isCastling =
@@ -388,6 +399,18 @@ if (import.meta.vitest) {
 			expect(board[move.from]).toBeUndefined()
 			expect(board[expected.king]?.toLowerCase()).toBe("k")
 			expect(board[expected.rook]?.toLowerCase()).toBe("r")
+		}
+	})
+
+	it.concurrent("removes the captured pawn for en passant", () => {
+		for (const [fen, move, captured] of [
+			["4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", { from: 28, to: 19 }, 27],
+			["4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1", { from: 36, to: 43 }, 35],
+		] as const) {
+			const board = nextBoard(createBoardFromFen(fen), move)
+			expect(board[move.from]).toBeUndefined()
+			expect(board[captured]).toBeUndefined()
+			expect(board[move.to]?.toLowerCase()).toBe("p")
 		}
 	})
 }

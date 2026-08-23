@@ -1,4 +1,6 @@
-use crate::game::Color;
+use std::fmt;
+
+use crate::state::Color;
 
 #[macro_export]
 macro_rules! square {
@@ -69,8 +71,22 @@ impl Square {
     }
 }
 
+impl From<Square> for u32 {
+    fn from(square: Square) -> Self {
+        square.0 as Self
+    }
+}
+
 const impl From<Square> for usize {
     fn from(square: Square) -> Self {
         square.0 as Self
+    }
+}
+
+impl fmt::Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let file = char::from(b'a' + self.file());
+        let rank = char::from(b'1' + self.rank());
+        write!(f, "{file}{rank}")
     }
 }

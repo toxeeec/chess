@@ -93,6 +93,10 @@ impl MoveList {
         self.0.extend(iter);
     }
 
+    pub(crate) fn push(&mut self, mve: Move) {
+        self.0.push(mve);
+    }
+
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.0.len()

@@ -1,6 +1,4 @@
-use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize};
-use std::{marker::ConstParamTy, ops::Not};
+use anyhow::{Context, Result};
 
 use crate::{
     attacks::{KingThreats, evasion_mask, king_threats},
@@ -13,46 +11,8 @@ use crate::{
     pawn::add_pawn_moves,
     queen::add_queen_moves,
     rook::add_rook_moves,
+    state::{Color, EnPassant, State},
 };
-
-#[derive(Clone, Copy, ConstParamTy, Debug, Deserialize, Eq, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub(super) enum Color {
-    White,
-    Black,
-}
-
-impl Color {
-    pub(super) const fn opponent(self) -> Self {
-        match self {
-            Self::White => Self::Black,
-            Self::Black => Self::White,
-        }
-    }
-
-    pub(super) const fn fen_value(self) -> &'static str {
-        match self {
-            Self::White => "w",
-            Self::Black => "b",
-        }
-    }
-
-    pub(super) fn from_fen_value(value: &str) -> Result<Self> {
-        match value {
-            "w" => Ok(Self::White),
-            "b" => Ok(Self::Black),
-            _ => bail!("invalid FEN active color: {value}"),
-        }
-    }
-}
-
-const impl Not for Color {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        self.opponent()
-    }
-}
 
 pub(super) enum MakeMoveError {
     IllegalMove,
@@ -63,20 +23,6 @@ pub(super) struct Game {
     pub(super) board: Board,
     pub(super) state: State,
     pub(super) moves: MoveList,
-}
-
-pub(super) struct State {
-    pub(super) turn: Color,
-    castling_rights: CastlingRights,
-}
-
-impl State {
-    pub(super) const fn new(turn: Color, castling_rights: CastlingRights) -> Self {
-        Self {
-            turn,
-            castling_rights,
-        }
-    }
 }
 
 impl Default for Game {
@@ -103,23 +49,15 @@ impl Game {
     pub(super) fn from_fen(fen: &str) -> Result<Self> {
         let mut fields = fen.split_whitespace();
         let placement = fields.next().context("FEN must contain piece placement")?;
-        let active_color = fields.next().context("FEN must contain active color")?;
-        let castling = fields.next().context("FEN must contain castling rights")?;
 
         let board = Board::from_fen(placement)?;
-        let turn = Color::from_fen_value(active_color)?;
-        let castling_rights = CastlingRights::from_fen(castling, &board)?;
+        let state = State::from_fen(&mut fields, &board)?;
 
-        Ok(Self::new(board, State::new(turn, castling_rights)))
+        Ok(Self::new(board, state))
     }
 
     pub(super) fn fen(&self) -> String {
-        format!(
-            "{} {} {} - 0 1",
-            self.board.fen(),
-            self.state.turn.fen_value(),
-            self.state.castling_rights
-        )
+        format!("{} {}", self.board.fen(), self.state)
     }
 
     pub(super) fn make_move(&mut self, color: Color, mve: Move) -> Result<(), MakeMoveError> {
@@ -132,7 +70,20 @@ impl Game {
         }
 
         self.state.castling_rights.update(mve.from, mve.to);
-        self.board.make_move(self.state.turn, mve);
+        let is_pawn = (self.board.pawns::<{ Color::White }>()
+            | self.board.pawns::<{ Color::Black }>())
+        .contains(mve.from);
+        let en_passant = if is_pawn && mve.from.rank().abs_diff(mve.to.rank()) == 2 {
+            EnPassant::new(match self.state.turn {
+                Color::White => mve.to.backward::<{ Color::White }, 1>(),
+                Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
+            })
+        } else {
+            EnPassant::NONE
+        };
+
+        self.board.apply_move(self.state.turn, mve);
+        self.state.en_passant = en_passant;
         self.state.turn = self.state.turn.opponent();
 
         self.moves.clear();
@@ -172,6 +123,7 @@ impl Game {
                 enemy,
                 evasion_mask,
                 pin_rays,
+                self.state.en_passant,
                 &mut self.moves,
             );
             add_knight_moves::<COLOR>(
@@ -223,7 +175,7 @@ impl Game {
 mod tests {
     use crate::{square, test_utils::board};
 
-    use super::{CastlingRights, Color, Game, State};
+    use super::{CastlingRights, Color, EnPassant, Game, State};
 
     fn has_move(game: &Game, mve: &str) -> bool {
         game.moves.contains(mve.parse().unwrap())
@@ -269,6 +221,11 @@ mod tests {
             "7k/8/8/8/8/8/8/4K2R w Q - 0 1",
             "4k3/8/8/8/8/8/8/7K b k - 0 1",
             "4k2r/8/8/8/8/8/8/7K b q - 0 1",
+            "7k/8/8/3p4/8/8/8/4K3 w - d3 0 1",
+            "7k/8/3P4/3p4/8/8/8/4K3 w - d6 0 1",
+            "7k/3n4/8/3p4/8/8/8/4K3 w - d6 0 1",
+            "7k/8/8/8/8/8/3P4/4K3 b - d3 0 1",
+            "7k/8/8/8/8/8/8/4K3 w - i6 0 1",
         ] {
             assert!(Game::from_fen(fen).is_err(), "{fen} should be invalid");
         }
@@ -332,7 +289,7 @@ mod tests {
     fn non_sliding_check_allows_only_checker_captures() {
         let game = Game::new(
             board!(
-                k . . . . . . .
+                . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -354,7 +311,7 @@ mod tests {
         let game = Game::new(
             board!(
                 . . . . r . . .
-                . . . . . . . k
+                . . . . . . . .
                 . . . . . . . .
                 . B . . . . . .
                 . . . . . . . .
@@ -374,7 +331,7 @@ mod tests {
     fn double_check_generates_only_king_moves() {
         let game = Game::new(
             board!(
-                . . . . r . . k
+                . . . . r . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -394,7 +351,7 @@ mod tests {
     fn checked_king_cannot_retreat_on_ray_or_capture_defended_piece() {
         let ray = Game::new(
             board!(
-                . . . . r . . k
+                . . . . r . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -409,7 +366,7 @@ mod tests {
 
         let defended = Game::new(
             board!(
-                . . . . . . . k
+                . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -427,7 +384,7 @@ mod tests {
     fn pin_detection_restricts_moves_to_the_pin_ray() {
         let game = Game::new(
             board!(
-                . . . . r . . k
+                . . . . r . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -465,6 +422,197 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(game.fen(), "7k/8/8/3P4/8/8/8/K7 b - - 0 1");
+    }
+
+    #[test]
+    fn generates_and_applies_en_passant_for_both_colors() {
+        for (fen, mve, expected) in [
+            (
+                "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+                "e5d6",
+                "4k3/8/3P4/8/8/8/8/4K3 b - - 0 1",
+            ),
+            (
+                "4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1",
+                "e4d3",
+                "4k3/8/8/8/8/3p4/8/4K3 w - - 0 1",
+            ),
+        ] {
+            let mut game = Game::from_fen(fen).unwrap();
+            assert!(has_move(&game, mve));
+            assert!(
+                game.make_move(game.state.turn, mve.parse().unwrap())
+                    .is_ok()
+            );
+            assert_eq!(game.fen(), expected);
+        }
+    }
+
+    #[test]
+    fn en_passant_legality_handles_checks_pins_and_two_removed_pawns() {
+        for (name, board, turn, target, legal, illegal) in [
+            (
+                "two white pawns can capture",
+                board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . P p P . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . K . . .
+                ),
+                Color::White,
+                square!(d6),
+                &["c5d6", "e5d6"][..],
+                &[][..],
+            ),
+            (
+                "two black pawns can capture",
+                board!(
+                    . . . . . . k .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    p P p . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                Color::Black,
+                square!(b3),
+                &["a4b3", "c4b3"][..],
+                &[][..],
+            ),
+            (
+                "one of two pawns is file-pinned",
+                board!(
+                    . . r . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . P p P . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . K . . . . .
+                ),
+                Color::White,
+                square!(d6),
+                &["e5d6"][..],
+                &["c5d6"][..],
+            ),
+            (
+                "capture removes a checking pawn",
+                board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . p P . . .
+                    . . . . K . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                Color::White,
+                square!(d6),
+                &["e5d6"][..],
+                &[][..],
+            ),
+            (
+                "capturing exposes a horizontal rook attack",
+                board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    r . . . . p P K
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                Color::White,
+                square!(f6),
+                &[][..],
+                &["g5f6"][..],
+            ),
+            (
+                "mirrored horizontal rook attack",
+                board!(
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    R . p P . . k .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                ),
+                Color::Black,
+                square!(d3),
+                &[][..],
+                &["c4d3"][..],
+            ),
+            (
+                "capturing exposes a diagonal bishop attack",
+                board!(
+                    . . . . . . b .
+                    . . . . . . . .
+                    . . . . . . . .
+                    . . . p P . . .
+                    . . . . . . . .
+                    . . . . . . . .
+                    K . . . . . . .
+                    . . . . . . . .
+                ),
+                Color::White,
+                square!(d6),
+                &[][..],
+                &["e5d6"][..],
+            ),
+        ] {
+            let mut state = State::new(turn, CastlingRights::NONE);
+            state.en_passant = EnPassant::new(target);
+            let game = Game::new(board, state);
+            for mve in legal {
+                assert!(has_move(&game, mve), "{name}: {mve} should be legal");
+            }
+            for mve in illegal {
+                assert!(!has_move(&game, mve), "{name}: {mve} should be illegal");
+            }
+        }
+    }
+
+    #[test]
+    fn double_push_sets_en_passant_target_and_next_move_clears_it() {
+        let mut game = Game::from_fen("4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1").unwrap();
+
+        assert!(
+            game.make_move(Color::Black, "d7d5".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(game.fen(), "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1");
+        assert!(has_move(&game, "e5d6"));
+
+        assert!(
+            game.make_move(Color::White, "e1e2".parse().unwrap())
+                .is_ok()
+        );
+        assert_eq!(game.fen(), "4k3/8/8/3pP3/8/8/4K3/8 b - - 0 1");
+    }
+
+    #[test]
+    fn standard_fen_keeps_an_en_passant_target_without_a_capturer() {
+        let mut game = Game::default();
+        assert!(
+            game.make_move(Color::White, "e2e4".parse().unwrap())
+                .is_ok()
+        );
+
+        assert_eq!(
+            game.fen(),
+            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        );
     }
 
     #[test]

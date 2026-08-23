@@ -2,10 +2,9 @@ use anyhow::Context;
 use serde::Deserialize;
 use worker::{Date, Result, SqlStorageValue, Storage};
 
-use crate::{
-    game::Game,
-    game_state::{GameClock, GameLifecycle, GameState, GameTimeouts},
-};
+use crate::game::Game;
+
+use super::state::{GameClock, GameLifecycle, GameState, GameTimeouts};
 
 pub(super) struct GameStorage {
     inner: Storage,

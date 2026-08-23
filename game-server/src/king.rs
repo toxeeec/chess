@@ -2,9 +2,9 @@ use crate::{
     bitboard::{Bitboard, Direction},
     board::Board,
     castling::{CastlingRights, add_castling_moves},
-    game::Color,
     moves::{Move, MoveList},
     square::Square,
+    state::Color,
 };
 
 pub(super) fn add_king_moves<const COLOR: Color>(
@@ -48,8 +48,8 @@ mod tests {
         attacks::king_threats,
         board::Board,
         castling::CastlingRights,
-        game::Color,
         moves::MoveList,
+        state::Color,
         test_utils::{MoveCase, assert_move_cases, board, moves},
     };
 

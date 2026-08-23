@@ -4,7 +4,7 @@ use std::{
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, IndexMut, Not, Shl, Shr},
 };
 
-use crate::{game::Color, square::Square};
+use crate::{square::Square, state::Color};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Bitboard(pub(super) u64);

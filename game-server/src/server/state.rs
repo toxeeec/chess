@@ -1,6 +1,7 @@
 use crate::{
-    game::{Color, Game, MakeMoveError as GameMakeMoveError},
+    game::{Game, MakeMoveError as GameMakeMoveError},
     moves::{Move, MoveList},
+    state::Color,
 };
 use std::fmt;
 
@@ -327,7 +328,7 @@ impl fmt::Display for GameLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{castling::CastlingRights, game::State};
+    use crate::{castling::CastlingRights, state::State};
 
     const NOW: i64 = 1_000;
     const JOIN_TIMEOUT_MS: i32 = 100;

@@ -87,7 +87,7 @@ export function PromotionDialog() {
 			className={clsx(
 				"inset-auto left-[anchor(left)] flex w-[anchor-size(width)] bg-neutral-200 text-neutral-800 [position-anchor:--promotion-square] backdrop:bg-neutral-950/35",
 				!!pendingPromotion &&
-					(Square.getRank(pendingPromotion.to) === 0
+					(Square.rank(pendingPromotion.to) === 0
 						? "top-[anchor(top)] flex-col"
 						: "bottom-[anchor(bottom)] flex-col-reverse"),
 			)}

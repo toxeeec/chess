@@ -2,8 +2,10 @@ use crate::{
     attacks::PinRays,
     bitboard::Bitboard,
     board::Board,
-    game::Color,
+    magics::{bishop_attacks, rook_attacks},
     moves::{Move, MoveList, PromotionPiece},
+    square::Square,
+    state::{Color, EnPassant},
 };
 
 pub(super) fn add_pawn_moves<const COLOR: Color>(
@@ -12,8 +14,11 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
     enemies: Bitboard,
     evasion_mask: Bitboard,
     pin_rays: PinRays,
+    en_passant: EnPassant,
     list: &mut MoveList,
-) {
+) where
+    [(); { !COLOR } as usize]:,
+{
     let pawns = board.pawns::<COLOR>();
     let pinned = pin_rays.pinned_pieces(pawns);
     let unpinned = pawns & !pinned;
@@ -65,6 +70,49 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
                 PromotionPiece::ALL.map(|piece| Move::new(from, to, Some(piece)))
             }),
     );
+
+    if let Some(to) = en_passant.target() {
+        let target = Bitboard::from(to);
+        let captured = to.backward::<COLOR, 1>();
+        let occupied = !empty;
+        let west = pawns.forward_west::<COLOR>() & target;
+        let east = pawns.forward_east::<COLOR>() & target;
+
+        let evades_check = !(evasion_mask & (target | Bitboard::from(captured))).empty();
+        if evades_check {
+            if !west.empty() {
+                let from = to.backward_east::<COLOR>();
+                if en_passant_is_legal::<COLOR>(board, occupied, from, to, captured) {
+                    list.push(Move::new(from, to, None));
+                }
+            }
+            if !east.empty() {
+                let from = to.backward_west::<COLOR>();
+                if en_passant_is_legal::<COLOR>(board, occupied, from, to, captured) {
+                    list.push(Move::new(from, to, None));
+                }
+            }
+        }
+    }
+}
+
+fn en_passant_is_legal<const COLOR: Color>(
+    board: &Board,
+    occupied: Bitboard,
+    from: Square,
+    to: Square,
+    captured: Square,
+) -> bool
+where
+    [(); { !COLOR } as usize]:,
+{
+    let king = board.king_square::<COLOR>();
+    let occupied = (occupied & !Bitboard::from([from, captured])) | Bitboard::from(to);
+    let diagonal_sliders = board.bishops::<{ !COLOR }>() | board.queens::<{ !COLOR }>();
+    let orthogonal_sliders = board.rooks::<{ !COLOR }>() | board.queens::<{ !COLOR }>();
+
+    (bishop_attacks(king, occupied) & diagonal_sliders).empty()
+        && (rook_attacks(king, occupied) & orthogonal_sliders).empty()
 }
 
 #[cfg(test)]
@@ -73,15 +121,18 @@ mod tests {
         attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
-        game::Color,
         moves::MoveList,
         squares,
+        state::{Color, EnPassant},
         test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 
     use super::add_pawn_moves;
 
-    fn pawn_moves<const COLOR: Color>(board: Board, pin_rays: PinRays) -> MoveList {
+    fn pawn_moves<const COLOR: Color>(board: Board, pin_rays: PinRays) -> MoveList
+    where
+        [(); { !COLOR } as usize]:,
+    {
         let mut moves = MoveList::default();
         let blockers = board.occupancy::<COLOR>();
         let occupied = board.occupied();
@@ -92,10 +143,19 @@ mod tests {
             occupied & !blockers,
             Bitboard::FULL,
             pin_rays,
+            EnPassant::NONE,
             &mut moves,
         );
 
         moves
+    }
+
+    fn white_pawn_moves(board: Board, pin_rays: PinRays) -> MoveList {
+        pawn_moves::<{ Color::White }>(board, pin_rays)
+    }
+
+    fn black_pawn_moves(board: Board, pin_rays: PinRays) -> MoveList {
+        pawn_moves::<{ Color::Black }>(board, pin_rays)
     }
 
     #[test]
@@ -195,7 +255,7 @@ mod tests {
                     ),
                 },
             ],
-            |board| pawn_moves::<{ Color::White }>(board, PinRays::EMPTY),
+            |board| white_pawn_moves(board, PinRays::EMPTY),
         );
     }
 
@@ -296,7 +356,7 @@ mod tests {
                     ),
                 },
             ],
-            |board| pawn_moves::<{ Color::Black }>(board, PinRays::EMPTY),
+            |board| black_pawn_moves(board, PinRays::EMPTY),
         );
     }
 
@@ -373,7 +433,7 @@ mod tests {
                     . . . . . . . .
                 ),
             },
-            |board| pawn_moves::<{ Color::White }>(board, pin_rays),
+            |board| white_pawn_moves(board, pin_rays),
         );
     }
 
@@ -405,7 +465,7 @@ mod tests {
                     . . . . . . . .
                 ),
             },
-            |board| pawn_moves::<{ Color::White }>(board, pin_rays),
+            |board| white_pawn_moves(board, pin_rays),
         );
     }
 
@@ -437,7 +497,7 @@ mod tests {
                     . . . . . . . .
                 ),
             },
-            |board| pawn_moves::<{ Color::Black }>(board, pin_rays),
+            |board| black_pawn_moves(board, pin_rays),
         );
     }
 
@@ -469,7 +529,7 @@ mod tests {
                     . . . . . . . .
                 ),
             },
-            |board| pawn_moves::<{ Color::Black }>(board, pin_rays),
+            |board| black_pawn_moves(board, pin_rays),
         );
     }
 }

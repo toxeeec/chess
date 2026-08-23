@@ -1,11 +1,11 @@
 use crate::{
     bitboard::Bitboard,
     board::Board,
-    game::Color,
     king::KING_ATTACKS,
     knight::KNIGHT_ATTACKS,
     magics::{bishop_attacks, rook_attacks},
     square::Square,
+    state::Color,
 };
 
 pub(super) struct KingThreats {
@@ -166,7 +166,7 @@ static RAY_MASKS: [[Bitboard; 64]; 64] = {
 
 #[cfg(test)]
 mod tests {
-    use crate::{bitboard::Bitboard, game::Color, square, squares, test_utils::board};
+    use crate::{bitboard::Bitboard, square, squares, state::Color, test_utils::board};
 
     use super::{RAY_MASKS, king_threats};
 
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn king_attackers_find_every_piece_type() {
         let board = board!(
-            . . . . r . . k
+            . . . . r . . .
             . . . . . . . q
             . . . . . . . .
             . . n p . . . .
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn king_attackers_respect_blockers_and_preserve_multiple_attackers() {
         let blocked = board!(
-            b . . . . . . k
+            b . . . . . . .
             . . . . . . . .
             . . p . . . . .
             . . . . . . . .
@@ -237,7 +237,7 @@ mod tests {
         );
 
         let double = board!(
-            . . . . r . . k
+            . . . . r . . .
             . . . . . . . .
             . . . . . . . .
             . . n . . . . .
@@ -252,7 +252,7 @@ mod tests {
         );
 
         let quiet = board!(
-            . . . . . . . k
+            . . . . . . . .
             . . . . . . . .
             . . . . . . . .
             . . . . . . . .
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn king_threats_collect_pin_rays_by_slider_type() {
         let board = board!(
-            . . . . r . . k
+            . . . . r . . .
             . . . . . . . .
             . . . . . . . .
             b . . . . . . .
@@ -291,7 +291,7 @@ mod tests {
         );
 
         let double_blocked = board!(
-            . . . . r . . k
+            . . . . r . . .
             . . . . . . . .
             . . . . . . . .
             . . . . . . . .

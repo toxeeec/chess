@@ -1,4 +1,6 @@
 mod messages;
+mod state;
+mod storage;
 
 pub use messages::SnapshotMessage;
 
@@ -11,13 +13,12 @@ use worker::{
     js_sys::{Date, Number},
 };
 
-use crate::{
-    game::{Color, Game},
-    game_state::{GameState, PlayerConnected, StateChange},
-    game_storage::GameStorage,
-    server::messages::{
-        ClientMessage, Clock, ErrorMessage, MoveMessage, ServerMessage, StatusMessage,
-    },
+use crate::{game::Game, state::Color};
+
+use self::{
+    messages::{ClientMessage, Clock, ErrorMessage, MoveMessage, ServerMessage, StatusMessage},
+    state::{GameState, PlayerConnected, StateChange},
+    storage::GameStorage,
 };
 
 const COLOR_HEADER: &str = "Player-Color";

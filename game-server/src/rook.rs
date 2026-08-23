@@ -2,9 +2,9 @@ use crate::{
     attacks::PinRays,
     bitboard::Bitboard,
     board::Board,
-    game::Color,
     magics::rook_attacks,
     moves::{Move, MoveList},
+    state::Color,
 };
 
 pub(super) fn add_rook_moves<const COLOR: Color>(
@@ -35,9 +35,9 @@ mod tests {
         attacks::PinRays,
         bitboard::Bitboard,
         board::Board,
-        game::Color,
         moves::MoveList,
         squares,
+        state::Color,
         test_utils::{MoveCase, assert_move_case, assert_move_cases, board, moves},
     };
 
@@ -92,7 +92,7 @@ mod tests {
                         . . . . . . . .
                         . . . P . . . .
                         . . . . . . . .
-                        . P . R . . p p
+                        . P . R . . p .
                         . . . . . . . .
                         . . . p . . . .
                         . . . . . . . .

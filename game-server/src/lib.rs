@@ -15,8 +15,6 @@ mod bitboard;
 mod board;
 mod castling;
 mod game;
-mod game_state;
-mod game_storage;
 mod king;
 mod knight;
 mod magics;
@@ -26,6 +24,7 @@ mod queen;
 mod rook;
 mod server;
 mod square;
+mod state;
 #[cfg(test)]
 mod test_utils;
 

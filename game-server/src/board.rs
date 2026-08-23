@@ -4,11 +4,11 @@ use anyhow::{Result, bail};
 
 use crate::{
     bitboard::Bitboard,
-    game::Color,
     moves::{Move, PromotionPiece},
     square,
     square::Square,
     squares,
+    state::Color,
 };
 
 pub(super) struct Board {
@@ -226,17 +226,26 @@ impl Board {
         }
     }
 
-    pub(super) fn make_move(&mut self, color: Color, mve: Move) {
+    pub(super) fn apply_move(&mut self, color: Color, mve: Move) {
         const CASTLING_ROOK_MOVES: [[(Square, Square); 2]; 2] = [
             [(square!(a1), square!(d1)), (square!(h1), square!(f1))],
             [(square!(a8), square!(d8)), (square!(h8), square!(f8))],
         ];
 
-        let king = match color {
-            Color::White => self.white_king,
-            Color::Black => self.black_king,
-        };
-        let is_castling = king.contains(mve.from) & (mve.from.file().abs_diff(mve.to.file()) == 2);
+        let is_castling = (self.white_king | self.black_king).contains(mve.from)
+            & (mve.from.file().abs_diff(mve.to.file()) == 2);
+        let is_en_passant = (self.white_pawns | self.black_pawns).contains(mve.from)
+            & (mve.from.file() != mve.to.file())
+            & !self.occupied().contains(mve.to);
+
+        if is_en_passant {
+            let captured = match color {
+                Color::White => mve.to.backward::<{ Color::White }, 1>(),
+                Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
+            };
+            self.white_pawns &= !Bitboard::from(captured);
+            self.black_pawns &= !Bitboard::from(captured);
+        }
 
         self.for_each_bb_mut(|piece| {
             piece.apply_move(mve.from, mve.to);
@@ -289,7 +298,6 @@ impl Board {
         fen
     }
 
-    #[cfg(test)]
     pub(super) const fn occupied(&self) -> Bitboard {
         self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }

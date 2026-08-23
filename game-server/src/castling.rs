@@ -5,11 +5,11 @@ use anyhow::{Result, bail};
 use crate::{
     bitboard::Bitboard,
     board::Board,
-    game::Color,
     moves::{Move, MoveList},
     square,
     square::Square,
     squares,
+    state::Color,
 };
 
 #[derive(Clone, Copy)]
@@ -208,7 +208,8 @@ impl fmt::Display for CastlingRights {
 mod tests {
     use crate::{
         castling::CastlingRights,
-        game::{Color, Game, State},
+        game::Game,
+        state::{Color, State},
         test_utils::board,
     };
 
@@ -220,7 +221,7 @@ mod tests {
     fn generates_castling_moves_only_when_the_path_is_clear_and_safe() {
         let clear = Game::new(
             board!(
-                r . . . k . . r
+                . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -236,14 +237,14 @@ mod tests {
 
         let no_rights = Game::new(
             board!(
-                r . . . k . . r
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
-                R . . . K . . R
+                . . . . . . . .
+                . . . . K . . .
             ),
             State::new(Color::White, CastlingRights::NONE),
         );
@@ -252,7 +253,7 @@ mod tests {
 
         let blocked = Game::new(
             board!(
-                . . . . k . . .
+                . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -268,7 +269,7 @@ mod tests {
 
         let in_check = Game::new(
             board!(
-                . . . . r . . k
+                . . . . r . . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -284,7 +285,7 @@ mod tests {
 
         let attacked_transit = Game::new(
             board!(
-                . . . . k r . .
+                . . . . . r . .
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
@@ -307,7 +308,7 @@ mod tests {
                 . . . . . . . .
                 . . . . . . . .
                 . . . . . . . .
-                . . . . K . . .
+                . . . . . . . .
             ),
             State::new(Color::Black, CastlingRights::ALL),
         );

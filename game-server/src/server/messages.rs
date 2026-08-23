@@ -3,11 +3,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize, Serializer};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::{
-    game::{Color, Game},
-    game_state::{GameLifecycle, GameState, MakeMoveError},
-    moves::Move,
-};
+use crate::{game::Game, moves::Move, state::Color};
+
+use super::state::{GameLifecycle, GameState, MakeMoveError};
 
 #[derive(Clone, Copy)]
 #[wasm_bindgen]
@@ -220,8 +218,9 @@ mod tests {
     use crate::{
         board::Board,
         castling::CastlingRights,
-        game::{Game, State},
-        game_state::{GameClock, GameLifecycle, GameTimeouts},
+        game::Game,
+        server::state::{GameClock, GameLifecycle, GameTimeouts},
+        state::State,
     };
 
     const NOW: i64 = 1_000;

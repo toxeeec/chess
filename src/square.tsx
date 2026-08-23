@@ -10,15 +10,15 @@ const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1] as const
 
 export const Square = {
-	getFile(square: number) {
+	file(square: number) {
 		return square % 8
 	},
-	getRank(square: number) {
+	rank(square: number) {
 		return Math.floor(square / 8)
 	},
 	isLight(square: number) {
-		const rank = this.getRank(square)
-		const file = this.getFile(square)
+		const rank = this.rank(square)
+		const file = this.file(square)
 		return (rank + file) % 2 === 0
 	},
 } as const
@@ -53,8 +53,8 @@ export function BoardSquare({ square }: { square: number }) {
 				isPromotionTarget && "[anchor-name:--promotion-square]",
 			)}
 		>
-			{Square.getFile(square) === 0 && <Coordinate square={square} rank />}
-			{Square.getRank(square) === 7 && <Coordinate square={square} file />}
+			{Square.file(square) === 0 && <Coordinate square={square} rank />}
+			{Square.rank(square) === 7 && <Coordinate square={square} file />}
 			{isLegalMoveTarget && <LegalMoveDot square={square} />}
 			{piece && !pieceHidden && (
 				<DraggablePiece piece={piece} square={square} disabled={disabled} />
@@ -95,8 +95,8 @@ function Coordinate({
 				file && "right-[6%] bottom-[6%]",
 			)}
 		>
-			{rank && RANKS[Square.getRank(square)]}
-			{file && FILES[Square.getFile(square)]}
+			{rank && RANKS[Square.rank(square)]}
+			{file && FILES[Square.file(square)]}
 		</span>
 	)
 }
