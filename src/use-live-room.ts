@@ -59,11 +59,15 @@ const movesSchema = z
 	.transform((moves) => (moves === "" ? [] : moves.split(" ").map(decodeMove)))
 
 const playerSchema = z.enum(["white", "black"])
-const gameEndReasonSchema = z.enum(["checkmate", "timeout", "disconnect"])
-const gameStatusSchema = z.discriminatedUnion("type", [
+const gameStatusSchema = z.union([
 	z.object({ type: z.literal("waiting") }),
 	z.object({ type: z.literal("active") }),
-	z.object({ type: z.literal("ended"), winner: playerSchema, reason: gameEndReasonSchema }),
+	z.object({
+		type: z.literal("ended"),
+		winner: playerSchema,
+		reason: z.enum(["checkmate", "timeout", "disconnect"]),
+	}),
+	z.object({ type: z.literal("ended"), reason: z.literal("stalemate") }),
 	z.object({ type: z.literal("expired") }),
 ])
 export type GameStatus = z.infer<typeof gameStatusSchema>

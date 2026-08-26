@@ -4,7 +4,9 @@ use worker::{Date, Result, Storage};
 
 use crate::{game::Game, state::Color};
 
-use super::state::{GameClock, GameEndReason, GameLifecycle, GameState, GameTimeouts};
+use super::state::{
+    DrawReason, GameClock, GameLifecycle, GameOutcome, GameState, GameTimeouts, WinReason,
+};
 
 pub(super) struct GameStorage {
     inner: Storage,
@@ -19,12 +21,19 @@ enum GameStatus {
     Expired,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(untagged)]
+enum EndReason {
+    Won(WinReason),
+    Drawn(DrawReason),
+}
+
 #[derive(Debug, Deserialize)]
 struct SqlGameRow {
     revision: u32,
     status: GameStatus,
     winner: Option<Color>,
-    end_reason: Option<GameEndReason>,
+    end_reason: Option<EndReason>,
     fen: String,
     created_at: i64,
     white_disconnected_at: Option<i64>,
@@ -38,23 +47,12 @@ struct SqlGameRow {
 }
 
 impl GameStatus {
-    const fn as_str(self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::Waiting => "waiting",
             Self::Active => "active",
             Self::Ended => "ended",
             Self::Expired => "expired",
-        }
-    }
-}
-
-impl From<GameLifecycle> for GameStatus {
-    fn from(lifecycle: GameLifecycle) -> Self {
-        match lifecycle {
-            GameLifecycle::Waiting { .. } => Self::Waiting,
-            GameLifecycle::Active { .. } => Self::Active,
-            GameLifecycle::Ended { .. } => Self::Ended,
-            GameLifecycle::Expired => Self::Expired,
         }
     }
 }
@@ -71,7 +69,7 @@ impl GameStorage {
                 revision INTEGER NOT NULL, \
                 status TEXT NOT NULL CHECK (status IN ('waiting', 'active', 'ended', 'expired')), \
                 winner TEXT CHECK (winner IN ('white', 'black')), \
-                end_reason TEXT CHECK (end_reason IN ('checkmate', 'timeout', 'disconnect')), \
+                end_reason TEXT CHECK (end_reason IN ('checkmate', 'stalemate', 'timeout', 'disconnect')), \
                 fen TEXT NOT NULL, \
                 created_at INTEGER NOT NULL, \
                 white_disconnected_at INTEGER, \
@@ -97,8 +95,9 @@ impl GameStorage {
                         AND turn_started_at IS NULL \
                         AND white_disconnected_at IS NULL \
                         AND black_disconnected_at IS NULL \
-                        AND winner IS NOT NULL \
-                        AND end_reason IS NOT NULL) \
+                        AND end_reason IS NOT NULL \
+                        AND ((end_reason = 'stalemate' AND winner IS NULL) \
+                            OR (end_reason != 'stalemate' AND winner IS NOT NULL))) \
                     OR (status = 'expired' \
                         AND turn_started_at IS NULL \
                         AND white_disconnected_at IS NULL \
@@ -217,7 +216,7 @@ impl GameStorage {
                 (state.revision as i32).into(),
                 GameStatus::from(state.lifecycle).as_str().into(),
                 state.winner().map(Color::as_str).into(),
-                state.end_reason().map(GameEndReason::as_str).into(),
+                state.end_reason().into(),
                 state.game.fen().into(),
                 state.white_disconnected_at().into(),
                 state.black_disconnected_at().into(),
@@ -228,6 +227,18 @@ impl GameStorage {
         )?;
 
         Ok(())
+    }
+}
+
+impl EndReason {
+    fn into_outcome(self, winner: Option<Color>) -> Result<GameOutcome> {
+        match (self, winner) {
+            (Self::Won(reason), Some(winner)) => Ok(GameOutcome::Won { winner, reason }),
+            (Self::Drawn(reason), None) => Ok(GameOutcome::Drawn { reason }),
+            _ => Err(worker::Error::RustError(
+                "stored game outcome is invalid".to_string(),
+            )),
+        }
     }
 }
 
@@ -264,17 +275,12 @@ impl TryFrom<SqlGameRow> for GameState {
                 }
             }
             GameStatus::Ended => {
-                let Some(winner) = row.winner else {
-                    return Err(worker::Error::RustError(
-                        "ended game row must have a winner".to_string(),
-                    ));
-                };
                 let Some(reason) = row.end_reason else {
                     return Err(worker::Error::RustError(
                         "ended game row must have an end reason".to_string(),
                     ));
                 };
-                GameLifecycle::Ended { winner, reason }
+                GameLifecycle::Ended(reason.into_outcome(row.winner)?)
             }
             GameStatus::Expired => GameLifecycle::Expired,
         };
@@ -295,5 +301,16 @@ impl TryFrom<SqlGameRow> for GameState {
             },
             lifecycle,
         })
+    }
+}
+
+impl From<GameLifecycle> for GameStatus {
+    fn from(lifecycle: GameLifecycle) -> Self {
+        match lifecycle {
+            GameLifecycle::Waiting { .. } => Self::Waiting,
+            GameLifecycle::Active { .. } => Self::Active,
+            GameLifecycle::Ended(_) => Self::Ended,
+            GameLifecycle::Expired => Self::Expired,
+        }
     }
 }

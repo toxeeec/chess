@@ -156,42 +156,42 @@ impl Board {
         Self::parse_fen_placement(&fen).expect("board! generated invalid FEN")
     }
 
-    pub(super) const fn pawns<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn pawns<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_pawns,
             Color::Black => self.black_pawns,
         }
     }
 
-    pub(super) const fn knights<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn knights<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_knights,
             Color::Black => self.black_knights,
         }
     }
 
-    pub(super) const fn rooks<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn rooks<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_rooks,
             Color::Black => self.black_rooks,
         }
     }
 
-    pub(super) const fn bishops<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn bishops<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_bishops,
             Color::Black => self.black_bishops,
         }
     }
 
-    pub(super) const fn queens<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn queens<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_queens,
             Color::Black => self.black_queens,
         }
     }
 
-    pub(super) const fn king<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn king<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => self.white_king,
             Color::Black => self.black_king,
@@ -205,7 +205,7 @@ impl Board {
         unsafe { king.next().unwrap_unchecked() }
     }
 
-    pub(super) const fn occupancy<const COLOR: Color>(&self) -> Bitboard {
+    pub(super) fn occupancy<const COLOR: Color>(&self) -> Bitboard {
         match COLOR {
             Color::White => {
                 self.white_pawns
@@ -298,7 +298,7 @@ impl Board {
         fen
     }
 
-    pub(super) const fn occupied(&self) -> Bitboard {
+    pub(super) fn occupied(&self) -> Bitboard {
         self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }
 

@@ -29,7 +29,7 @@ impl PromotionPiece {
 }
 
 impl Move {
-    pub(super) const fn new(from: Square, to: Square, promotion: Option<PromotionPiece>) -> Self {
+    pub(super) fn new(from: Square, to: Square, promotion: Option<PromotionPiece>) -> Self {
         Self {
             from,
             to,

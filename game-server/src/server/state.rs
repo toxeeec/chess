@@ -19,18 +19,55 @@ pub(crate) struct GameClock {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum GameEndReason {
+pub(crate) enum WinReason {
     Checkmate,
     Timeout,
     Disconnect,
 }
 
-impl GameEndReason {
-    pub(crate) const fn as_str(self) -> &'static str {
+impl WinReason {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Checkmate => "checkmate",
             Self::Timeout => "timeout",
             Self::Disconnect => "disconnect",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum DrawReason {
+    Stalemate,
+}
+
+impl DrawReason {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Stalemate => "stalemate",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(crate) enum GameOutcome {
+    Won { winner: Color, reason: WinReason },
+    Drawn { reason: DrawReason },
+}
+
+impl GameOutcome {
+    pub(crate) fn winner(self) -> Option<Color> {
+        match self {
+            Self::Won { winner, .. } => Some(winner),
+            Self::Drawn { .. } => None,
+        }
+    }
+
+    pub(crate) fn reason(self) -> &'static str {
+        match self {
+            Self::Won { reason, .. } => reason.as_str(),
+            Self::Drawn { reason } => reason.as_str(),
         }
     }
 }
@@ -45,10 +82,7 @@ pub(crate) enum GameLifecycle {
         white_disconnected_at: Option<i64>,
         black_disconnected_at: Option<i64>,
     },
-    Ended {
-        winner: Color,
-        reason: GameEndReason,
-    },
+    Ended(GameOutcome),
     Expired,
 }
 
@@ -105,38 +139,38 @@ impl From<GameMakeMoveError> for MakeMoveError {
 }
 
 impl GameState {
-    pub(crate) const fn white_disconnected_at(&self) -> Option<i64> {
+    pub(crate) fn white_disconnected_at(&self) -> Option<i64> {
         match self.lifecycle {
             GameLifecycle::Active {
                 white_disconnected_at,
                 ..
             } => white_disconnected_at,
-            GameLifecycle::Waiting { .. }
-            | GameLifecycle::Ended { .. }
-            | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. } | GameLifecycle::Ended(_) | GameLifecycle::Expired => {
+                None
+            }
         }
     }
 
-    pub(crate) const fn black_disconnected_at(&self) -> Option<i64> {
+    pub(crate) fn black_disconnected_at(&self) -> Option<i64> {
         match self.lifecycle {
             GameLifecycle::Active {
                 black_disconnected_at,
                 ..
             } => black_disconnected_at,
-            GameLifecycle::Waiting { .. }
-            | GameLifecycle::Ended { .. }
-            | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. } | GameLifecycle::Ended(_) | GameLifecycle::Expired => {
+                None
+            }
         }
     }
 
-    pub(crate) const fn turn_started_at(&self) -> Option<i64> {
+    pub(crate) fn turn_started_at(&self) -> Option<i64> {
         match self.lifecycle {
             GameLifecycle::Active {
                 turn_started_at, ..
             } => Some(turn_started_at),
-            GameLifecycle::Waiting { .. }
-            | GameLifecycle::Ended { .. }
-            | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. } | GameLifecycle::Ended(_) | GameLifecycle::Expired => {
+                None
+            }
         }
     }
 
@@ -176,7 +210,7 @@ impl GameState {
                     }
                 }
             },
-            GameLifecycle::Ended { .. } | GameLifecycle::Expired => StateChange::Unchanged,
+            GameLifecycle::Ended(_) | GameLifecycle::Expired => StateChange::Unchanged,
         }
     }
 
@@ -217,19 +251,19 @@ impl GameState {
             Timeout::Join | Timeout::FirstMove => GameLifecycle::Expired,
             Timeout::Clock { color } => {
                 *self.remaining_ms_mut(color) = 0;
-                GameLifecycle::Ended {
+                GameLifecycle::Ended(GameOutcome::Won {
                     winner: color.opponent(),
-                    reason: GameEndReason::Timeout,
-                }
+                    reason: WinReason::Timeout,
+                })
             }
             Timeout::Disconnect { color } => {
                 if self.revision == 0 {
                     GameLifecycle::Expired
                 } else {
-                    GameLifecycle::Ended {
+                    GameLifecycle::Ended(GameOutcome::Won {
                         winner: color.opponent(),
-                        reason: GameEndReason::Disconnect,
-                    }
+                        reason: WinReason::Disconnect,
+                    })
                 }
             }
         };
@@ -277,7 +311,7 @@ impl GameState {
             .into_iter()
             .flatten()
             .min_by_key(|scheduled| scheduled.at),
-            GameLifecycle::Ended { .. } | GameLifecycle::Expired => None,
+            GameLifecycle::Ended(_) | GameLifecycle::Expired => None,
         }
     }
 
@@ -313,10 +347,15 @@ impl GameState {
         }
         self.revision += 1;
 
-        if let Some(GameResult::Win { winner }) = result {
-            self.lifecycle = GameLifecycle::Ended {
-                winner,
-                reason: GameEndReason::Checkmate,
+        if let Some(result) = result {
+            self.lifecycle = match result {
+                GameResult::Win { winner } => GameLifecycle::Ended(GameOutcome::Won {
+                    winner,
+                    reason: WinReason::Checkmate,
+                }),
+                GameResult::Draw => GameLifecycle::Ended(GameOutcome::Drawn {
+                    reason: DrawReason::Stalemate,
+                }),
             };
         }
 
@@ -327,7 +366,7 @@ impl GameState {
         turn_started_at + self.remaining_ms(self.game.state.turn) as i64
     }
 
-    const fn remaining_ms(&self, color: Color) -> i32 {
+    fn remaining_ms(&self, color: Color) -> i32 {
         match color {
             Color::White => self.clock.white_remaining_ms,
             Color::Black => self.clock.black_remaining_ms,
@@ -344,24 +383,24 @@ impl GameState {
     pub(super) fn legal_moves(&self) -> &MoveList {
         match self.lifecycle {
             GameLifecycle::Active { .. } => &self.game.moves,
-            GameLifecycle::Waiting { .. }
-            | GameLifecycle::Ended { .. }
-            | GameLifecycle::Expired => MoveList::EMPTY,
+            GameLifecycle::Waiting { .. } | GameLifecycle::Ended(_) | GameLifecycle::Expired => {
+                MoveList::EMPTY
+            }
         }
     }
 
     pub(super) fn winner(&self) -> Option<Color> {
         match self.lifecycle {
-            GameLifecycle::Ended { winner, .. } => Some(winner),
+            GameLifecycle::Ended(outcome) => outcome.winner(),
             GameLifecycle::Waiting { .. }
             | GameLifecycle::Active { .. }
             | GameLifecycle::Expired => None,
         }
     }
 
-    pub(super) fn end_reason(&self) -> Option<GameEndReason> {
+    pub(super) fn end_reason(&self) -> Option<&'static str> {
         match self.lifecycle {
-            GameLifecycle::Ended { reason, .. } => Some(reason),
+            GameLifecycle::Ended(outcome) => Some(outcome.reason()),
             GameLifecycle::Waiting { .. }
             | GameLifecycle::Active { .. }
             | GameLifecycle::Expired => None,
@@ -554,10 +593,10 @@ mod tests {
         );
         assert!(matches!(
             state.lifecycle,
-            GameLifecycle::Ended {
+            GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::White,
-                reason: GameEndReason::Timeout,
-            }
+                reason: WinReason::Timeout,
+            })
         ));
     }
 
@@ -579,15 +618,41 @@ mod tests {
 
         assert!(matches!(
             state.lifecycle,
-            GameLifecycle::Ended {
+            GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::Black,
-                reason: GameEndReason::Checkmate,
-            }
+                reason: WinReason::Checkmate,
+            })
         ));
         assert_eq!(state.winner(), Some(Color::Black));
         assert!(state.legal_moves().is_empty());
         assert!(matches!(
             state.make_move(Color::White, "a2a3".parse().unwrap(), NOW),
+            Err(MakeMoveError::GameNotActive)
+        ));
+    }
+
+    #[test]
+    fn stalemate_ends_game_without_a_winner() {
+        let mut state = GameState {
+            game: Game::from_fen("7k/5K2/8/6Q1/8/8/8/8 w - - 0 1").unwrap(),
+            lifecycle: active_lifecycle(NOW),
+            ..test_state()
+        };
+
+        state
+            .make_move(Color::White, "g5g6".parse().unwrap(), NOW)
+            .unwrap();
+
+        assert!(matches!(
+            state.lifecycle,
+            GameLifecycle::Ended(GameOutcome::Drawn {
+                reason: DrawReason::Stalemate,
+            })
+        ));
+        assert_eq!(state.winner(), None);
+        assert!(state.legal_moves().is_empty());
+        assert!(matches!(
+            state.make_move(Color::Black, "h8g8".parse().unwrap(), NOW),
             Err(MakeMoveError::GameNotActive)
         ));
     }
@@ -643,10 +708,10 @@ mod tests {
         );
         assert!(matches!(
             state.lifecycle,
-            GameLifecycle::Ended {
+            GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::Black,
-                reason: GameEndReason::Disconnect,
-            }
+                reason: WinReason::Disconnect,
+            })
         ));
     }
 
@@ -668,10 +733,10 @@ mod tests {
         );
         assert!(matches!(
             state.lifecycle,
-            GameLifecycle::Ended {
+            GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::White,
-                reason: GameEndReason::Disconnect,
-            }
+                reason: WinReason::Disconnect,
+            })
         ));
     }
 
@@ -761,10 +826,10 @@ mod tests {
     fn rejects_moves_unless_game_is_active() {
         for lifecycle in [
             GameLifecycle::Waiting { created_at: NOW },
-            GameLifecycle::Ended {
+            GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::White,
-                reason: GameEndReason::Checkmate,
-            },
+                reason: WinReason::Checkmate,
+            }),
             GameLifecycle::Expired,
         ] {
             let mut state = GameState {
@@ -793,15 +858,15 @@ mod tests {
     #[test]
     fn ended_game_ignores_due_timeouts_and_has_no_next_timeout() {
         let mut state = GameState {
-            lifecycle: GameLifecycle::Ended {
+            lifecycle: GameLifecycle::Ended(GameOutcome::Won {
                 winner: Color::White,
-                reason: GameEndReason::Checkmate,
-            },
+                reason: WinReason::Checkmate,
+            }),
             ..test_state()
         };
 
         assert_eq!(state.process_due_timeout(NOW), StateChange::Unchanged);
-        assert!(matches!(state.lifecycle, GameLifecycle::Ended { .. }));
+        assert!(matches!(state.lifecycle, GameLifecycle::Ended(_)));
         assert_eq!(state.next_timeout_at(), None);
     }
 }

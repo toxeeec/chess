@@ -30,10 +30,12 @@ function gameStatusMatcher(status?: string, winner?: string, reason?: string) {
 				winner: expect.toBeOneOf(["white", "black"]),
 				reason: expect.toBeOneOf(["checkmate", "timeout", "disconnect"]),
 			}),
+			{ type: "ended", reason: "stalemate" },
 			{ type: "expired" },
 		])
 	}
 	if (status !== "ended") return { type: status }
+	if (reason === "stalemate") return { type: status, reason }
 	return expect.objectContaining({
 		type: status,
 		winner: winner ?? expect.toBeOneOf(["white", "black"]),

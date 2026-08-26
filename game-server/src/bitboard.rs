@@ -52,14 +52,14 @@ impl Bitboard {
         }
     }
 
-    pub(super) const fn forward_west<const COLOR: Color>(self) -> Self {
+    pub(super) fn forward_west<const COLOR: Color>(self) -> Self {
         match COLOR {
             Color::White => self.shift::<{ Direction::Northwest }>(),
             Color::Black => self.shift::<{ Direction::Southwest }>(),
         }
     }
 
-    pub(super) const fn forward_east<const COLOR: Color>(self) -> Self {
+    pub(super) fn forward_east<const COLOR: Color>(self) -> Self {
         match COLOR {
             Color::White => self.shift::<{ Direction::Northeast }>(),
             Color::Black => self.shift::<{ Direction::Southeast }>(),
@@ -87,7 +87,7 @@ impl Bitboard {
         }
     }
 
-    const fn shift_n<const DIRECTION: Direction, const N: u32>(self) -> Self {
+    fn shift_n<const DIRECTION: Direction, const N: u32>(self) -> Self {
         let mut bitboard = self;
         let mut i = 0;
 
@@ -99,8 +99,8 @@ impl Bitboard {
         bitboard
     }
 
-    pub(super) const fn relative_rank<const COLOR: Color>(n: u32) -> Self {
-        debug_assert!(n >= 1 && n <= 8);
+    pub(super) fn relative_rank<const COLOR: Color>(n: u32) -> Self {
+        debug_assert!((1..=8).contains(&n));
         let rank = match COLOR {
             Color::White => n,
             Color::Black => 9 - n,

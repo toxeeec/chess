@@ -22,7 +22,7 @@ pub(super) struct State {
 }
 
 impl Color {
-    pub(super) const fn as_str(self) -> &'static str {
+    pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::White => "white",
             Self::Black => "black",
@@ -44,7 +44,7 @@ impl Color {
         }
     }
 
-    pub(super) const fn fen(self) -> &'static str {
+    pub(super) fn fen(self) -> &'static str {
         match self {
             Self::White => "w",
             Self::Black => "b",
@@ -111,7 +111,7 @@ impl EnPassant {
 }
 
 impl State {
-    pub(super) const fn new(turn: Color, castling_rights: CastlingRights) -> Self {
+    pub(super) fn new(turn: Color, castling_rights: CastlingRights) -> Self {
         Self {
             turn,
             castling_rights,

@@ -38,7 +38,9 @@ export class GameServer extends DurableObject {
 			status:
 				typeof status === "string"
 					? { type: status }
-					: { type: "ended" as const, winner: status.winner, reason: status.reason },
+					: status.reason === "stalemate"
+						? { type: "ended" as const, reason: status.reason }
+						: { type: "ended" as const, winner: status.winner, reason: status.reason },
 			clock: {
 				whiteRemainingMs,
 				blackRemainingMs,

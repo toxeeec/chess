@@ -22,6 +22,7 @@ pub(super) enum MakeMoveError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum GameResult {
     Win { winner: Color },
+    Draw,
 }
 
 pub(super) struct Game {
@@ -176,7 +177,15 @@ impl Game {
             &mut self.moves,
         );
 
-        (self.moves.is_empty() && !attackers.empty()).then_some(GameResult::Win { winner: !COLOR })
+        if self.moves.is_empty() {
+            Some(if attackers.empty() {
+                GameResult::Draw
+            } else {
+                GameResult::Win { winner: !COLOR }
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -278,6 +287,17 @@ mod tests {
                 Ok(result) if result == winner
             ));
         }
+    }
+
+    #[test]
+    fn detects_stalemate_after_a_move() {
+        let mut game = Game::from_fen("7k/5K2/8/6Q1/8/8/8/8 w - - 0 1").unwrap();
+
+        assert!(matches!(
+            game.make_move(Color::White, "g5g6".parse().unwrap()),
+            Ok(Some(GameResult::Draw))
+        ));
+        assert!(game.moves.is_empty());
     }
 
     #[test]

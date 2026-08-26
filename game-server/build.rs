@@ -223,7 +223,7 @@ struct SplitMix64 {
 }
 
 impl SplitMix64 {
-    const fn new(seed: u64) -> Self {
+    fn new(seed: u64) -> Self {
         Self { state: seed }
     }
 

@@ -32,7 +32,7 @@ impl PinRays {
     }
 
     #[cfg(test)]
-    pub(super) const fn diagonal(ray: Bitboard) -> Self {
+    pub(super) fn diagonal(ray: Bitboard) -> Self {
         Self {
             diagonal: ray,
             orthogonal: Bitboard::EMPTY,
@@ -40,7 +40,7 @@ impl PinRays {
     }
 
     #[cfg(test)]
-    pub(super) const fn orthogonal(ray: Bitboard) -> Self {
+    pub(super) fn orthogonal(ray: Bitboard) -> Self {
         Self {
             diagonal: Bitboard::EMPTY,
             orthogonal: ray,

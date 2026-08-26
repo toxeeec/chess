@@ -27,11 +27,11 @@ impl Square {
         Self(square)
     }
 
-    pub(super) const fn file(self) -> u8 {
+    pub(super) fn file(self) -> u8 {
         (self.0 % 8) as u8
     }
 
-    pub(super) const fn rank(self) -> u8 {
+    pub(super) fn rank(self) -> u8 {
         (self.0 / 8) as u8
     }
 
@@ -49,21 +49,21 @@ impl Square {
         Self::new((square[1] - b'1') as u32 * 8 + (square[0] - b'a') as u32)
     }
 
-    pub(super) const fn backward<const COLOR: Color, const N: u32>(self) -> Self {
+    pub(super) fn backward<const COLOR: Color, const N: u32>(self) -> Self {
         match COLOR {
             Color::White => Square::new(self.0 - N * 8),
             Color::Black => Square::new(self.0 + N * 8),
         }
     }
 
-    pub(super) const fn backward_west<const COLOR: Color>(self) -> Self {
+    pub(super) fn backward_west<const COLOR: Color>(self) -> Self {
         match COLOR {
             Color::White => Square::new(self.0 - 9),
             Color::Black => Square::new(self.0 + 7),
         }
     }
 
-    pub(super) const fn backward_east<const COLOR: Color>(self) -> Self {
+    pub(super) fn backward_east<const COLOR: Color>(self) -> Self {
         match COLOR {
             Color::White => Square::new(self.0 - 7),
             Color::Black => Square::new(self.0 + 9),

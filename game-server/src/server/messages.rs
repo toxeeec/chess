@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::{moves::Move, state::Color};
 
-use super::state::{GameEndReason, GameLifecycle, GameState, MakeMoveError};
+use super::state::{DrawReason, GameLifecycle, GameOutcome, GameState, MakeMoveError, WinReason};
 
 #[wasm_bindgen(js_name = Color)]
 pub enum WasmColor {
@@ -11,22 +11,27 @@ pub enum WasmColor {
     Black = "black",
 }
 
-#[wasm_bindgen(js_name = GameEndReason)]
-pub enum WasmGameEndReason {
+#[wasm_bindgen(js_name = WinReason)]
+pub enum WasmWinReason {
     Checkmate = "checkmate",
     Timeout = "timeout",
     Disconnect = "disconnect",
 }
 
+#[wasm_bindgen(js_name = DrawReason)]
+pub enum WasmDrawReason {
+    Stalemate = "stalemate",
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[wasm_bindgen]
-pub struct EndedStatus {
+pub struct WonStatus {
     winner: Color,
-    reason: GameEndReason,
+    reason: WinReason,
 }
 
 #[wasm_bindgen]
-impl EndedStatus {
+impl WonStatus {
     #[wasm_bindgen(getter)]
     pub fn winner(&self) -> WasmColor {
         match self.winner {
@@ -36,13 +41,37 @@ impl EndedStatus {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn reason(&self) -> WasmGameEndReason {
+    pub fn reason(&self) -> WasmWinReason {
         match self.reason {
-            GameEndReason::Checkmate => WasmGameEndReason::Checkmate,
-            GameEndReason::Timeout => WasmGameEndReason::Timeout,
-            GameEndReason::Disconnect => WasmGameEndReason::Disconnect,
+            WinReason::Checkmate => WasmWinReason::Checkmate,
+            WinReason::Timeout => WasmWinReason::Timeout,
+            WinReason::Disconnect => WasmWinReason::Disconnect,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[wasm_bindgen]
+pub struct DrawnStatus {
+    reason: DrawReason,
+}
+
+#[wasm_bindgen]
+impl DrawnStatus {
+    #[wasm_bindgen(getter)]
+    pub fn reason(&self) -> WasmDrawReason {
+        match self.reason {
+            DrawReason::Stalemate => WasmDrawReason::Stalemate,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+#[wasm_bindgen(js_name = GameOutcome)]
+pub enum WasmGameOutcome {
+    Won(WonStatus),
+    Drawn(DrawnStatus),
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -51,7 +80,7 @@ impl EndedStatus {
 pub enum GameStatus {
     Waiting = "waiting",
     Active = "active",
-    Ended(EndedStatus),
+    Ended(WasmGameOutcome),
     Expired = "expired",
 }
 
@@ -197,7 +226,12 @@ impl From<GameLifecycle> for GameStatus {
         match lifecycle {
             GameLifecycle::Waiting { .. } => Self::Waiting,
             GameLifecycle::Active { .. } => Self::Active,
-            GameLifecycle::Ended { winner, reason } => Self::Ended(EndedStatus { winner, reason }),
+            GameLifecycle::Ended(GameOutcome::Won { winner, reason }) => {
+                Self::Ended(WasmGameOutcome::Won(WonStatus { winner, reason }))
+            }
+            GameLifecycle::Ended(GameOutcome::Drawn { reason }) => {
+                Self::Ended(WasmGameOutcome::Drawn(DrawnStatus { reason }))
+            }
             GameLifecycle::Expired => Self::Expired,
         }
     }
