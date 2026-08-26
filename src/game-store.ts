@@ -3,16 +3,21 @@ import { createContext, use, useSyncExternalStore } from "react"
 import { Piece } from "./piece"
 import type { Player } from "./room"
 import { Square } from "./square"
-import type { Clock, Move } from "./use-live-room"
+import type { Clock, GameStatus, Move } from "./use-live-room"
 
 type GameStore = ReturnType<typeof createGameStore>
 type GameState = ReturnType<GameStore["getState"]>
-type Snapshot = { fen: string; legalMoves: readonly Move[]; clock: Clock }
+type Snapshot = {
+	fen: string
+	legalMoves: readonly Move[]
+	clock: Clock
+	status: GameStatus
+}
 
 export const GameStoreContext = createContext<GameStore | null>(null)
 
 export function createGameStore({
-	snapshot: { fen, legalMoves, clock },
+	snapshot: { fen, legalMoves, clock, status },
 	player,
 	onMove,
 }: {
@@ -31,8 +36,10 @@ export function createGameStore({
 		player,
 		clock: { ...clock, receivedAtMs: Date.now() },
 		legalMoves: turn === player ? legalMoves : [],
+		status,
 		getLegalMoves,
 	}
+	let optimisticMove: Move | null = null
 
 	const listeners = new Set<() => void>()
 	const notify = () => {
@@ -45,6 +52,7 @@ export function createGameStore({
 		getState: () => state,
 		setState: (snapshot: Partial<Snapshot>) => {
 			const turn = snapshot.fen ? getTurnFromFen(snapshot.fen) : state.turn
+			if (snapshot.fen) optimisticMove = null
 			state = {
 				...state,
 				turn,
@@ -57,6 +65,7 @@ export function createGameStore({
 				...(snapshot.legalMoves && {
 					legalMoves: turn === player ? snapshot.legalMoves : [],
 				}),
+				...(snapshot.status && { status: snapshot.status }),
 			}
 			notify()
 		},
@@ -71,6 +80,7 @@ export function createGameStore({
 				clock: switchClock(state.clock, state.player, state.turn),
 				legalMoves: [],
 			}
+			optimisticMove = move
 
 			onMove?.(move)
 			notify()
@@ -80,18 +90,26 @@ export function createGameStore({
 			legalMoves,
 			turn,
 			clock,
+			status,
 		}: {
 			move: Move
 			legalMoves: readonly Move[]
 			turn: Player
 			clock: Clock
+			status: GameStatus
 		}) => {
+			const board =
+				optimisticMove && movesEqual(optimisticMove, move)
+					? state.board
+					: nextBoard(state.board, move)
+			optimisticMove = null
 			state = {
 				...state,
-				board: nextBoard(state.board, move),
+				board,
 				turn,
 				clock: { ...clock, receivedAtMs: Date.now() },
 				legalMoves: turn === player ? legalMoves : [],
+				status,
 			}
 			notify()
 		},
@@ -217,6 +235,7 @@ if (import.meta.vitest) {
 		blackRemainingMs: 300_000,
 		running: false,
 	} as const satisfies Clock
+	const TEST_STATUS = { type: "active" } as const satisfies GameStatus
 
 	it.concurrent("returns valid board state for initial fen", () => {
 		expect(createBoardFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")).toEqual([
@@ -233,6 +252,7 @@ if (import.meta.vitest) {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
 				clock: TEST_CLOCK,
 				legalMoves: [{ from: 52, to: 44 }],
+				status: TEST_STATUS,
 			},
 		})
 
@@ -256,6 +276,7 @@ if (import.meta.vitest) {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
 				clock: TEST_CLOCK,
 				legalMoves: [{ from: 52, to: 44 }],
+				status: TEST_STATUS,
 			},
 		})
 
@@ -276,6 +297,7 @@ if (import.meta.vitest) {
 				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
 				clock: TEST_CLOCK,
 				legalMoves: [],
+				status: TEST_STATUS,
 			},
 		})
 
@@ -290,7 +312,12 @@ if (import.meta.vitest) {
 		const legalMoves = [{ from: 52, to: 44 }]
 		const store = createGameStore({
 			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves },
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves,
+				status: TEST_STATUS,
+			},
 		})
 
 		expect(store.getState().turn).toBe("white")
@@ -310,7 +337,12 @@ if (import.meta.vitest) {
 		} as const satisfies Clock
 		const store = createGameStore({
 			player: "white",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [],
+				status: TEST_STATUS,
+			},
 		})
 
 		store.setState({ clock: nextClock })
@@ -322,10 +354,21 @@ if (import.meta.vitest) {
 		const legalMoves = [{ from: 11, to: 19 }]
 		const store = createGameStore({
 			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [],
+				status: TEST_STATUS,
+			},
 		})
 
-		store.applyMove({ move: { from: 52, to: 44 }, turn: "black", clock: TEST_CLOCK, legalMoves })
+		store.applyMove({
+			move: { from: 52, to: 44 },
+			turn: "black",
+			clock: TEST_CLOCK,
+			legalMoves,
+			status: TEST_STATUS,
+		})
 
 		expect(store.getState().board[52]).toBeUndefined()
 		expect(store.getState().board[44]).toBe("P")
@@ -333,14 +376,55 @@ if (import.meta.vitest) {
 		expect(store.getState().legalMoves).toEqual(legalMoves)
 	})
 
+	it.concurrent("does not apply an echoed local move twice", () => {
+		const move = { from: 52, to: 44 }
+		const store = createGameStore({
+			player: "white",
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [move],
+				status: TEST_STATUS,
+			},
+		})
+
+		store.movePiece(move)
+		store.applyMove({
+			move,
+			turn: "black",
+			clock: TEST_CLOCK,
+			legalMoves: [],
+			status: { type: "ended", winner: "white", reason: "checkmate" },
+		})
+
+		expect(store.getState().board[52]).toBeUndefined()
+		expect(store.getState().board[44]).toBe("P")
+		expect(store.getState().status).toEqual({
+			type: "ended",
+			winner: "white",
+			reason: "checkmate",
+		})
+	})
+
 	it.concurrent("hides legal moves when it is the opponent's turn", () => {
 		const legalMoves = [{ from: 52, to: 44 }]
 		const store = createGameStore({
 			player: "black",
-			snapshot: { fen: "8/8/8/8/8/8/4P3/8 w - - 0 1", clock: TEST_CLOCK, legalMoves: [] },
+			snapshot: {
+				fen: "8/8/8/8/8/8/4P3/8 w - - 0 1",
+				clock: TEST_CLOCK,
+				legalMoves: [],
+				status: TEST_STATUS,
+			},
 		})
 
-		store.applyMove({ move: { from: 52, to: 44 }, turn: "white", clock: TEST_CLOCK, legalMoves })
+		store.applyMove({
+			move: { from: 52, to: 44 },
+			turn: "white",
+			clock: TEST_CLOCK,
+			legalMoves,
+			status: TEST_STATUS,
+		})
 
 		expect(store.getState().board[52]).toBeUndefined()
 		expect(store.getState().board[44]).toBe("P")
@@ -356,6 +440,7 @@ if (import.meta.vitest) {
 				fen: "8/P7/8/8/8/8/8/8 w - - 0 1",
 				clock: TEST_CLOCK,
 				legalMoves: [promotion],
+				status: TEST_STATUS,
 			},
 		})
 
@@ -374,6 +459,7 @@ if (import.meta.vitest) {
 				fen: "8/8/8/8/8/8/p7/8 b - - 0 1",
 				clock: TEST_CLOCK,
 				legalMoves: [],
+				status: TEST_STATUS,
 			},
 		})
 
@@ -382,6 +468,7 @@ if (import.meta.vitest) {
 			turn: "white",
 			clock: TEST_CLOCK,
 			legalMoves: [],
+			status: TEST_STATUS,
 		})
 
 		expect(store.getState().board[48]).toBeUndefined()

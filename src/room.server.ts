@@ -85,7 +85,7 @@ async function isResumableRoomSession(roomSession: RoomSession) {
 	if (!game) return false
 
 	const { status } = await env.GAME_SERVER.getByName(roomSession.roomId).snapshot()
-	return status === "waiting" || status === "active"
+	return status.type === "waiting" || status.type === "active"
 }
 
 export async function getGameByRoomSession(roomSession: RoomSession) {

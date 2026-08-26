@@ -1,9 +1,9 @@
 use crate::{
-    game::{Game, MakeMoveError as GameMakeMoveError},
+    game::{Game, GameResult, MakeMoveError as GameMakeMoveError},
     moves::{Move, MoveList},
     state::Color,
 };
-use std::fmt;
+use serde::{Deserialize, Serialize};
 
 pub(crate) struct GameTimeouts {
     pub(crate) join_timeout_ms: i32,
@@ -17,6 +17,24 @@ pub(crate) struct GameClock {
     pub(crate) black_remaining_ms: i32,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum GameEndReason {
+    Checkmate,
+    Timeout,
+    Disconnect,
+}
+
+impl GameEndReason {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Checkmate => "checkmate",
+            Self::Timeout => "timeout",
+            Self::Disconnect => "disconnect",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum GameLifecycle {
     Waiting {
@@ -27,7 +45,10 @@ pub(crate) enum GameLifecycle {
         white_disconnected_at: Option<i64>,
         black_disconnected_at: Option<i64>,
     },
-    Ended,
+    Ended {
+        winner: Color,
+        reason: GameEndReason,
+    },
     Expired,
 }
 
@@ -53,6 +74,20 @@ pub(crate) enum StateChange {
     LifecycleChanged,
 }
 
+#[derive(Clone, Copy)]
+enum Timeout {
+    Join,
+    FirstMove,
+    Clock { color: Color },
+    Disconnect { color: Color },
+}
+
+#[derive(Clone, Copy)]
+struct ScheduledTimeout {
+    at: i64,
+    timeout: Timeout,
+}
+
 #[derive(Debug)]
 pub(super) enum MakeMoveError {
     GameNotActive,
@@ -76,7 +111,9 @@ impl GameState {
                 white_disconnected_at,
                 ..
             } => white_disconnected_at,
-            GameLifecycle::Waiting { .. } | GameLifecycle::Ended | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Ended { .. }
+            | GameLifecycle::Expired => None,
         }
     }
 
@@ -86,7 +123,9 @@ impl GameState {
                 black_disconnected_at,
                 ..
             } => black_disconnected_at,
-            GameLifecycle::Waiting { .. } | GameLifecycle::Ended | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Ended { .. }
+            | GameLifecycle::Expired => None,
         }
     }
 
@@ -95,7 +134,9 @@ impl GameState {
             GameLifecycle::Active {
                 turn_started_at, ..
             } => Some(turn_started_at),
-            GameLifecycle::Waiting { .. } | GameLifecycle::Ended | GameLifecycle::Expired => None,
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Ended { .. }
+            | GameLifecycle::Expired => None,
         }
     }
 
@@ -135,7 +176,7 @@ impl GameState {
                     }
                 }
             },
-            GameLifecycle::Ended | GameLifecycle::Expired => StateChange::Unchanged,
+            GameLifecycle::Ended { .. } | GameLifecycle::Expired => StateChange::Unchanged,
         }
     }
 
@@ -164,90 +205,79 @@ impl GameState {
         }
     }
 
-    pub(super) fn process_due_event(&mut self, now: i64) -> StateChange {
-        match &self.lifecycle {
-            GameLifecycle::Waiting { created_at } => {
-                debug_assert!(now >= *created_at);
-                if created_at + self.timeouts.join_timeout_ms as i64 <= now {
-                    self.lifecycle = GameLifecycle::Expired;
-                    StateChange::LifecycleChanged
-                } else {
-                    StateChange::Unchanged
-                }
-            }
-            GameLifecycle::Active {
-                turn_started_at,
-                white_disconnected_at,
-                black_disconnected_at,
-            } => {
-                debug_assert!(now >= *turn_started_at);
-                debug_assert!(
-                    white_disconnected_at.is_none_or(|disconnected_at| now >= disconnected_at)
-                );
-                debug_assert!(
-                    black_disconnected_at.is_none_or(|disconnected_at| now >= disconnected_at)
-                );
-
-                let first_move_expired = self.revision == 0
-                    && turn_started_at + self.timeouts.first_move_timeout_ms as i64 <= now;
-                let clock_expired =
-                    self.revision > 0 && self.active_clock_expires_at(*turn_started_at) <= now;
-                let white_disconnect_expired =
-                    white_disconnected_at.is_some_and(|disconnected_at| {
-                        disconnected_at + self.timeouts.disconnect_timeout_ms as i64 <= now
-                    });
-                let black_disconnect_expired =
-                    black_disconnected_at.is_some_and(|disconnected_at| {
-                        disconnected_at + self.timeouts.disconnect_timeout_ms as i64 <= now
-                    });
-
-                if first_move_expired
-                    || clock_expired
-                    || white_disconnect_expired
-                    || black_disconnect_expired
-                {
-                    if clock_expired {
-                        *self.remaining_ms_mut(self.game.state.turn) = 0;
-                    }
-
-                    self.lifecycle = if self.revision == 0 {
-                        GameLifecycle::Expired
-                    } else {
-                        GameLifecycle::Ended
-                    };
-                    StateChange::LifecycleChanged
-                } else {
-                    StateChange::Unchanged
-                }
-            }
-            GameLifecycle::Ended | GameLifecycle::Expired => StateChange::Unchanged,
+    pub(super) fn process_due_timeout(&mut self, now: i64) -> StateChange {
+        let Some(scheduled) = self.next_timeout() else {
+            return StateChange::Unchanged;
+        };
+        if now < scheduled.at {
+            return StateChange::Unchanged;
         }
+
+        self.lifecycle = match scheduled.timeout {
+            Timeout::Join | Timeout::FirstMove => GameLifecycle::Expired,
+            Timeout::Clock { color } => {
+                *self.remaining_ms_mut(color) = 0;
+                GameLifecycle::Ended {
+                    winner: color.opponent(),
+                    reason: GameEndReason::Timeout,
+                }
+            }
+            Timeout::Disconnect { color } => {
+                if self.revision == 0 {
+                    GameLifecycle::Expired
+                } else {
+                    GameLifecycle::Ended {
+                        winner: color.opponent(),
+                        reason: GameEndReason::Disconnect,
+                    }
+                }
+            }
+        };
+        StateChange::LifecycleChanged
     }
 
-    pub(super) fn next_event_at(&self) -> Option<i64> {
+    pub(super) fn next_timeout_at(&self) -> Option<i64> {
+        self.next_timeout().map(|scheduled| scheduled.at)
+    }
+
+    fn next_timeout(&self) -> Option<ScheduledTimeout> {
         match self.lifecycle {
-            GameLifecycle::Waiting { created_at } => {
-                Some(created_at + self.timeouts.join_timeout_ms as i64)
-            }
+            GameLifecycle::Waiting { created_at } => Some(ScheduledTimeout {
+                at: created_at + self.timeouts.join_timeout_ms as i64,
+                timeout: Timeout::Join,
+            }),
             GameLifecycle::Active {
                 turn_started_at,
                 white_disconnected_at,
                 black_disconnected_at,
             } => [
-                (self.revision > 0).then_some(self.active_clock_expires_at(turn_started_at)),
-                (self.revision == 0)
-                    .then_some(turn_started_at + self.timeouts.first_move_timeout_ms as i64),
-                white_disconnected_at.map(|disconnected_at| {
-                    disconnected_at + self.timeouts.disconnect_timeout_ms as i64
+                (self.revision == 0).then_some(ScheduledTimeout {
+                    at: turn_started_at + self.timeouts.first_move_timeout_ms as i64,
+                    timeout: Timeout::FirstMove,
                 }),
-                black_disconnected_at.map(|disconnected_at| {
-                    disconnected_at + self.timeouts.disconnect_timeout_ms as i64
+                (self.revision > 0).then_some(ScheduledTimeout {
+                    at: self.active_clock_expires_at(turn_started_at),
+                    timeout: Timeout::Clock {
+                        color: self.game.state.turn,
+                    },
+                }),
+                white_disconnected_at.map(|disconnected_at| ScheduledTimeout {
+                    at: disconnected_at + self.timeouts.disconnect_timeout_ms as i64,
+                    timeout: Timeout::Disconnect {
+                        color: Color::White,
+                    },
+                }),
+                black_disconnected_at.map(|disconnected_at| ScheduledTimeout {
+                    at: disconnected_at + self.timeouts.disconnect_timeout_ms as i64,
+                    timeout: Timeout::Disconnect {
+                        color: Color::Black,
+                    },
                 }),
             ]
             .into_iter()
             .flatten()
-            .min(),
-            GameLifecycle::Ended | GameLifecycle::Expired => None,
+            .min_by_key(|scheduled| scheduled.at),
+            GameLifecycle::Ended { .. } | GameLifecycle::Expired => None,
         }
     }
 
@@ -263,7 +293,8 @@ impl GameState {
         debug_assert!(now >= turn_started_at);
 
         let moving_color = self.game.state.turn;
-        self.game
+        let result = self
+            .game
             .make_move(color, mve)
             .map_err(MakeMoveError::from)?;
 
@@ -275,13 +306,19 @@ impl GameState {
                 .max(0);
         }
         if let GameLifecycle::Active {
-            ref mut turn_started_at,
-            ..
-        } = self.lifecycle
+            turn_started_at, ..
+        } = &mut self.lifecycle
         {
             *turn_started_at = now;
         }
         self.revision += 1;
+
+        if let Some(GameResult::Win { winner }) = result {
+            self.lifecycle = GameLifecycle::Ended {
+                winner,
+                reason: GameEndReason::Checkmate,
+            };
+        }
 
         Ok(())
     }
@@ -307,21 +344,28 @@ impl GameState {
     pub(super) fn legal_moves(&self) -> &MoveList {
         match self.lifecycle {
             GameLifecycle::Active { .. } => &self.game.moves,
-            GameLifecycle::Waiting { .. } | GameLifecycle::Ended | GameLifecycle::Expired => {
-                MoveList::EMPTY
-            }
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Ended { .. }
+            | GameLifecycle::Expired => MoveList::EMPTY,
         }
     }
-}
 
-impl fmt::Display for GameLifecycle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Waiting { .. } => "waiting",
-            Self::Active { .. } => "active",
-            Self::Ended => "ended",
-            Self::Expired => "expired",
-        })
+    pub(super) fn winner(&self) -> Option<Color> {
+        match self.lifecycle {
+            GameLifecycle::Ended { winner, .. } => Some(winner),
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Active { .. }
+            | GameLifecycle::Expired => None,
+        }
+    }
+
+    pub(super) fn end_reason(&self) -> Option<GameEndReason> {
+        match self.lifecycle {
+            GameLifecycle::Ended { reason, .. } => Some(reason),
+            GameLifecycle::Waiting { .. }
+            | GameLifecycle::Active { .. }
+            | GameLifecycle::Expired => None,
+        }
     }
 }
 
@@ -401,7 +445,10 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
         assert!(matches!(state.lifecycle, GameLifecycle::Expired));
     }
 
@@ -413,7 +460,7 @@ mod tests {
         };
 
         assert_eq!(
-            state.process_due_event(NOW + JOIN_TIMEOUT_MS as i64),
+            state.process_due_timeout(NOW + JOIN_TIMEOUT_MS as i64),
             StateChange::Unchanged
         );
         assert!(matches!(state.lifecycle, GameLifecycle::Active { .. }));
@@ -426,7 +473,10 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
         assert!(matches!(state.lifecycle, GameLifecycle::Expired));
     }
 
@@ -438,7 +488,7 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::Unchanged);
+        assert_eq!(state.process_due_timeout(NOW), StateChange::Unchanged);
         assert!(matches!(state.lifecycle, GameLifecycle::Active { .. }));
     }
 
@@ -470,7 +520,7 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW + 50), StateChange::Unchanged);
+        assert_eq!(state.process_due_timeout(NOW + 50), StateChange::Unchanged);
         assert!(matches!(state.lifecycle, GameLifecycle::Active { .. }));
     }
 
@@ -499,10 +549,47 @@ mod tests {
         };
 
         assert_eq!(
-            state.process_due_event(NOW + 50),
+            state.process_due_timeout(NOW + 50),
             StateChange::LifecycleChanged
         );
-        assert!(matches!(state.lifecycle, GameLifecycle::Ended));
+        assert!(matches!(
+            state.lifecycle,
+            GameLifecycle::Ended {
+                winner: Color::White,
+                reason: GameEndReason::Timeout,
+            }
+        ));
+    }
+
+    #[test]
+    fn checkmate_ends_game_and_rejects_more_moves() {
+        let mut state = GameState {
+            lifecycle: active_lifecycle(NOW),
+            ..test_state()
+        };
+
+        for (color, mve) in [
+            (Color::White, "f2f3"),
+            (Color::Black, "e7e5"),
+            (Color::White, "g2g4"),
+            (Color::Black, "d8h4"),
+        ] {
+            state.make_move(color, mve.parse().unwrap(), NOW).unwrap();
+        }
+
+        assert!(matches!(
+            state.lifecycle,
+            GameLifecycle::Ended {
+                winner: Color::Black,
+                reason: GameEndReason::Checkmate,
+            }
+        ));
+        assert_eq!(state.winner(), Some(Color::Black));
+        assert!(state.legal_moves().is_empty());
+        assert!(matches!(
+            state.make_move(Color::White, "a2a3".parse().unwrap(), NOW),
+            Err(MakeMoveError::GameNotActive)
+        ));
     }
 
     #[test]
@@ -516,7 +603,7 @@ mod tests {
         };
 
         assert_eq!(
-            state.process_due_event(NOW + 50),
+            state.process_due_timeout(NOW + 50),
             StateChange::LifecycleChanged
         );
         assert_eq!(state.clock.white_remaining_ms, TIME_CONTROL_MS);
@@ -524,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn next_event_includes_active_clock_timeout() {
+    fn next_timeout_includes_active_clock() {
         let state = GameState {
             revision: 1,
             clock: GameClock {
@@ -535,7 +622,7 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.next_event_at(), Some(NOW + 50));
+        assert_eq!(state.next_timeout_at(), Some(NOW + 50));
     }
 
     #[test]
@@ -550,8 +637,17 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
-        assert!(matches!(state.lifecycle, GameLifecycle::Ended));
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
+        assert!(matches!(
+            state.lifecycle,
+            GameLifecycle::Ended {
+                winner: Color::Black,
+                reason: GameEndReason::Disconnect,
+            }
+        ));
     }
 
     #[test]
@@ -566,12 +662,21 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
-        assert!(matches!(state.lifecycle, GameLifecycle::Ended));
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
+        assert!(matches!(
+            state.lifecycle,
+            GameLifecycle::Ended {
+                winner: Color::White,
+                reason: GameEndReason::Disconnect,
+            }
+        ));
     }
 
     #[test]
-    fn white_disconnect_timeout_expires_game_if_no_moves_made() {
+    fn white_disconnect_timeout_expires_game_if_no_moves_were_made() {
         let mut state = GameState {
             lifecycle: GameLifecycle::Active {
                 turn_started_at: NOW,
@@ -581,12 +686,15 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
         assert!(matches!(state.lifecycle, GameLifecycle::Expired));
     }
 
     #[test]
-    fn black_disconnect_timeout_expires_game_if_no_moves_made() {
+    fn black_disconnect_timeout_expires_game_if_no_moves_were_made() {
         let mut state = GameState {
             lifecycle: GameLifecycle::Active {
                 turn_started_at: NOW,
@@ -596,7 +704,10 @@ mod tests {
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::LifecycleChanged);
+        assert_eq!(
+            state.process_due_timeout(NOW),
+            StateChange::LifecycleChanged
+        );
         assert!(matches!(state.lifecycle, GameLifecycle::Expired));
     }
 
@@ -641,7 +752,7 @@ mod tests {
             }),
             StateChange::Updated
         );
-        assert_eq!(state.process_due_event(NOW), StateChange::Unchanged);
+        assert_eq!(state.process_due_timeout(NOW), StateChange::Unchanged);
         assert!(matches!(state.lifecycle, GameLifecycle::Active { .. }));
         assert_eq!(state.white_disconnected_at(), None);
     }
@@ -650,7 +761,10 @@ mod tests {
     fn rejects_moves_unless_game_is_active() {
         for lifecycle in [
             GameLifecycle::Waiting { created_at: NOW },
-            GameLifecycle::Ended,
+            GameLifecycle::Ended {
+                winner: Color::White,
+                reason: GameEndReason::Checkmate,
+            },
             GameLifecycle::Expired,
         ] {
             let mut state = GameState {
@@ -667,24 +781,27 @@ mod tests {
     }
 
     #[test]
-    fn expired_game_has_no_next_event() {
+    fn expired_game_has_no_next_timeout() {
         let state = GameState {
             lifecycle: GameLifecycle::Expired,
             ..test_state()
         };
 
-        assert_eq!(state.next_event_at(), None);
+        assert_eq!(state.next_timeout_at(), None);
     }
 
     #[test]
-    fn ended_game_ignores_due_events_and_has_no_next_event() {
+    fn ended_game_ignores_due_timeouts_and_has_no_next_timeout() {
         let mut state = GameState {
-            lifecycle: GameLifecycle::Ended,
+            lifecycle: GameLifecycle::Ended {
+                winner: Color::White,
+                reason: GameEndReason::Checkmate,
+            },
             ..test_state()
         };
 
-        assert_eq!(state.process_due_event(NOW), StateChange::Unchanged);
-        assert!(matches!(state.lifecycle, GameLifecycle::Ended));
-        assert_eq!(state.next_event_at(), None);
+        assert_eq!(state.process_due_timeout(NOW), StateChange::Unchanged);
+        assert!(matches!(state.lifecycle, GameLifecycle::Ended { .. }));
+        assert_eq!(state.next_timeout_at(), None);
     }
 }

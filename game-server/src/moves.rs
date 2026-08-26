@@ -89,6 +89,10 @@ impl MoveList {
         self.0.contains(&mve)
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub(crate) fn extend<T: IntoIterator<Item = Move>>(&mut self, iter: T) {
         self.0.extend(iter);
     }

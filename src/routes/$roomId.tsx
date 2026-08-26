@@ -31,15 +31,15 @@ function RouteComponent() {
 			store.setState(snapshot)
 			lastRevision.current = snapshot.revision
 		},
-		onStatus: ({ legalMoves, clock }) => {
-			store.setState({ legalMoves, clock })
+		onStatus: ({ legalMoves, clock, status }) => {
+			store.setState({ legalMoves, clock, status })
 		},
-		onMove: ({ revision, move, legalMoves, turn, clock }) => {
+		onMove: ({ revision, move, legalMoves, turn, clock, status }) => {
 			if (revision <= lastRevision.current) return
 			if (revision !== lastRevision.current + 1) {
 				reconnect()
 			} else {
-				store.applyMove({ move, legalMoves, turn, clock })
+				store.applyMove({ move, legalMoves, turn, clock, status })
 				lastRevision.current = revision
 			}
 		},

@@ -28,7 +28,7 @@ async function expireWaitingRoom(roomId: RoomId) {
 	const stub = env.GAME_SERVER.getByName(roomId)
 	await stub.init({ ...TEST_GAME_CONFIG, joinTimeoutMs: 40 })
 	await new Promise((resolve) => setTimeout(resolve, 50))
-	expect(await stub.snapshot()).toMatchObject({ status: "expired" })
+	expect(await stub.snapshot()).toMatchObject({ status: { type: "expired" } })
 }
 
 function roomSessionRequest(roomSession: RoomSession) {

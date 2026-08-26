@@ -1,5 +1,3 @@
-use std::fmt;
-
 use anyhow::{Result, bail};
 
 use crate::{
@@ -101,6 +99,25 @@ impl CastlingRights {
     pub(super) fn update(&mut self, from: Square, to: Square) {
         self.0 &= RETAIN_CASTLING_RIGHTS[from] & RETAIN_CASTLING_RIGHTS[to];
     }
+
+    pub(super) fn fen(self) -> String {
+        if self.0 == 0 {
+            return "-".to_owned();
+        }
+
+        let mut fen = String::with_capacity(4);
+        for (castling_right, right) in [
+            (Self::WHITE_KINGSIDE, 'K'),
+            (Self::WHITE_QUEENSIDE, 'Q'),
+            (Self::BLACK_KINGSIDE, 'k'),
+            (Self::BLACK_QUEENSIDE, 'q'),
+        ] {
+            if self.contains(castling_right) {
+                fen.push(right);
+            }
+        }
+        fen
+    }
 }
 
 impl CastlingConfig {
@@ -182,26 +199,6 @@ pub(super) fn add_castling_moves<const COLOR: Color>(
             | ((king_side as u64) << usize::from(config.king_to)),
     );
     list.extend(castles.map(|to| Move::new(from, to, None)));
-}
-
-impl fmt::Display for CastlingRights {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0 == 0 {
-            return f.write_str("-");
-        }
-
-        for (castling_right, right) in [
-            (Self::WHITE_KINGSIDE, 'K'),
-            (Self::WHITE_QUEENSIDE, 'Q'),
-            (Self::BLACK_KINGSIDE, 'k'),
-            (Self::BLACK_QUEENSIDE, 'q'),
-        ] {
-            if self.contains(castling_right) {
-                write!(f, "{right}")?;
-            }
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]

@@ -16,7 +16,7 @@ use worker::{
 use crate::{game::Game, state::Color};
 
 use self::{
-    messages::{ClientMessage, Clock, ErrorMessage, MoveMessage, ServerMessage, StatusMessage},
+    messages::{ClientMessage, ErrorMessage, MoveMessage, ServerMessage, StatusMessage},
     state::{GameState, PlayerConnected, StateChange},
     storage::GameStorage,
 };
@@ -104,7 +104,7 @@ impl DurableObject for GameServer {
         {
             let now = Date::now() as i64;
             let mut state = self.state_mut()?;
-            let change = state.process_due_event(now);
+            let change = state.process_due_timeout(now);
             self.handle_state_change(&state, change, now)?;
         };
 
@@ -140,7 +140,7 @@ impl DurableObject for GameServer {
         let move_message = {
             let mut state = self.state_mut()?;
 
-            let due_change = state.process_due_event(now);
+            let due_change = state.process_due_timeout(now);
             if due_change != StateChange::Unchanged {
                 self.handle_state_change(&state, due_change, now)?;
                 return Ok(());
@@ -152,8 +152,7 @@ impl DurableObject for GameServer {
             }
 
             self.storage.save(&state)?;
-            let clock = Clock::new(&state, now);
-            MoveMessage::new(mve, state.revision, &state.game, clock)
+            MoveMessage::new(mve, &state, now)
         };
 
         let message = ServerMessage::Move(move_message);
@@ -256,7 +255,7 @@ impl GameServer {
     }
 
     async fn schedule_next_alarm(&self) -> Result<()> {
-        let next_alarm = self.state()?.next_event_at();
+        let next_alarm = self.state()?.next_timeout_at();
 
         match next_alarm {
             Some(next_alarm) => {

@@ -11,17 +11,38 @@ function waitForAlarm() {
 	return new Promise((resolve) => setTimeout(resolve, 50))
 }
 
-function clockMatcher(matcher?: DeeplyAllowMatchers<any>) {
+function clockMatcher(dataMatcher: DeeplyAllowMatchers<any>) {
 	return expect.objectContaining({
 		whiteRemainingMs: expect.any(Number),
 		blackRemainingMs: expect.any(Number),
 		running: expect.any(Boolean),
-		...matcher,
+		...dataMatcher,
 	})
 }
 
-function snapshotMessageMatcher(dataMatcher?: DeeplyAllowMatchers<any>) {
-	const { clock, ...dataMatcherRest } = dataMatcher ?? {}
+function gameStatusMatcher(status?: string, winner?: string, reason?: string) {
+	if (!status) {
+		return expect.toBeOneOf([
+			{ type: "waiting" },
+			{ type: "active" },
+			expect.objectContaining({
+				type: "ended",
+				winner: expect.toBeOneOf(["white", "black"]),
+				reason: expect.toBeOneOf(["checkmate", "timeout", "disconnect"]),
+			}),
+			{ type: "expired" },
+		])
+	}
+	if (status !== "ended") return { type: status }
+	return expect.objectContaining({
+		type: status,
+		winner: winner ?? expect.toBeOneOf(["white", "black"]),
+		reason: reason ?? expect.toBeOneOf(["checkmate", "timeout", "disconnect"]),
+	})
+}
+
+function snapshotMessageMatcher(dataMatcher: DeeplyAllowMatchers<any>) {
+	const { clock, status, winner, reason, ...dataMatcherRest } = dataMatcher
 
 	return {
 		type: "snapshot",
@@ -29,20 +50,20 @@ function snapshotMessageMatcher(dataMatcher?: DeeplyAllowMatchers<any>) {
 			clock: clockMatcher(clock),
 			fen: expect.any(String),
 			revision: expect.any(Number),
-			status: expect.any(String),
+			status: gameStatusMatcher(status, winner, reason),
 			legalMoves: expect.toBeOneOf([expect.any(String), null]),
 			...dataMatcherRest,
 		}),
 	}
 }
 
-function statusMessageMatcher(dataMatcher?: DeeplyAllowMatchers<any>) {
-	const { clock, ...dataMatcherRest } = dataMatcher ?? {}
+function statusMessageMatcher(dataMatcher: DeeplyAllowMatchers<any>) {
+	const { clock, status, winner, reason, ...dataMatcherRest } = dataMatcher
 
 	return {
 		type: "status",
 		data: expect.objectContaining({
-			status: expect.any(String),
+			status: gameStatusMatcher(status, winner, reason),
 			clock: clockMatcher(clock),
 			legalMoves: expect.toBeOneOf([expect.any(String), null]),
 			...dataMatcherRest,
@@ -118,8 +139,8 @@ async function connectPlayers(roomId: RoomId) {
 		acceptWebSocket(roomId, "black"),
 	])
 	await Promise.all([
-		expect(white.readMessage()).resolves.toEqual(snapshotMessageMatcher()),
-		expect(black.readMessage()).resolves.toEqual(snapshotMessageMatcher()),
+		expect(white.readMessage()).resolves.toEqual(snapshotMessageMatcher({ status: "waiting" })),
+		expect(black.readMessage()).resolves.toEqual(snapshotMessageMatcher({ status: "waiting" })),
 	])
 
 	const expected = statusMessageMatcher({
@@ -204,6 +225,8 @@ describe("GameServer", () => {
 			status: "ended",
 			clock: { blackRemainingMs: 0, running: false },
 			legalMoves: "",
+			winner: "white",
+			reason: "timeout",
 		})
 		await Promise.all([
 			expect(connections.white.readMessage()).resolves.toEqual(expected),
@@ -216,6 +239,7 @@ describe("GameServer", () => {
 				revision: 1,
 				fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
 				status: "ended",
+				reason: "timeout",
 				clock: { blackRemainingMs: 0, running: false },
 				legalMoves: "",
 			}),
@@ -238,6 +262,7 @@ describe("GameServer", () => {
 
 		const expected = statusMessageMatcher({
 			status: "ended",
+			reason: "timeout",
 			clock: { blackRemainingMs: 0, running: false },
 			legalMoves: "",
 		})
@@ -294,6 +319,8 @@ describe("GameServer", () => {
 				status: "ended",
 				clock: { running: false },
 				legalMoves: "",
+				winner: "black",
+				reason: "disconnect",
 			}),
 		)
 	})
@@ -354,6 +381,7 @@ describe("GameServer", () => {
 					running: true,
 				}),
 				legalMoves: expect.any(String),
+				status: { type: "active" },
 			}),
 		}
 
@@ -361,6 +389,39 @@ describe("GameServer", () => {
 			expect(connections.white.readMessage()).resolves.toEqual(expected),
 			expect(connections.black.readMessage()).resolves.toEqual(expected),
 		])
+	})
+
+	it.concurrent("ends the game and reports the winner on checkmate", async () => {
+		const roomId = generateRoomId()
+		const stub = env.GAME_SERVER.getByName(roomId)
+		await stub.init(TEST_GAME_CONFIG)
+		using connections = await connectPlayers(roomId)
+		const sendMove = async (connection: typeof connections.white, move: string) => {
+			connection.webSocket.send(JSON.stringify({ type: "move", data: move }))
+			return Promise.all([connections.white.readMessage(), connections.black.readMessage()])
+		}
+
+		await sendMove(connections.white, "f2f3")
+		await sendMove(connections.black, "e7e5")
+		await sendMove(connections.white, "g2g4")
+		const [whiteMessage, blackMessage] = await sendMove(connections.black, "d8h4")
+		const expected = {
+			type: "move",
+			data: expect.objectContaining({
+				move: "d8h4",
+				legalMoves: "",
+				status: { type: "ended", winner: "black", reason: "checkmate" },
+				clock: expect.objectContaining({ running: false }),
+			}),
+		}
+		expect(whiteMessage).toEqual(expected)
+		expect(blackMessage).toEqual(expected)
+
+		const snapshot = await stub.snapshot()
+		expect(snapshot).toMatchObject({
+			status: { type: "ended", winner: "black", reason: "checkmate" },
+			legalMoves: "",
+		})
 	})
 
 	it.concurrent("sends latest game snapshot to new websocket connections", async () => {
@@ -450,7 +511,9 @@ describe("GameServer", () => {
 		const roomId = generateRoomId()
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
-		await expect(connection.readMessage()).resolves.toEqual(snapshotMessageMatcher())
+		await expect(connection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({ status: "waiting" }),
+		)
 
 		connection.webSocket.send("not json")
 
@@ -464,7 +527,9 @@ describe("GameServer", () => {
 		const roomId = generateRoomId()
 		await env.GAME_SERVER.getByName(roomId).init(TEST_GAME_CONFIG)
 		using connection = await acceptWebSocket(roomId, "white")
-		await expect(connection.readMessage()).resolves.toEqual(snapshotMessageMatcher())
+		await expect(connection.readMessage()).resolves.toEqual(
+			snapshotMessageMatcher({ status: "waiting" }),
+		)
 
 		connection.webSocket.send(JSON.stringify({ type: "move", data: "e2e" }))
 

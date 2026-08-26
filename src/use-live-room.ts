@@ -59,6 +59,14 @@ const movesSchema = z
 	.transform((moves) => (moves === "" ? [] : moves.split(" ").map(decodeMove)))
 
 const playerSchema = z.enum(["white", "black"])
+const gameEndReasonSchema = z.enum(["checkmate", "timeout", "disconnect"])
+const gameStatusSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("waiting") }),
+	z.object({ type: z.literal("active") }),
+	z.object({ type: z.literal("ended"), winner: playerSchema, reason: gameEndReasonSchema }),
+	z.object({ type: z.literal("expired") }),
+])
+export type GameStatus = z.infer<typeof gameStatusSchema>
 
 const clockSchema = z.object({
 	whiteRemainingMs: z.number().int().nonnegative(),
@@ -71,13 +79,13 @@ export type Clock = z.infer<typeof clockSchema>
 export const snapshotMessageSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	fen: z.string(),
-	status: z.enum(["waiting", "active", "ended", "expired"]),
+	status: gameStatusSchema,
 	clock: clockSchema,
 	legalMoves: movesSchema,
 })
 
 const statusMessageSchema = z.object({
-	status: snapshotMessageSchema.shape.status,
+	status: gameStatusSchema,
 	clock: clockSchema,
 	legalMoves: movesSchema,
 })
@@ -88,6 +96,7 @@ const moveMessageSchema = z.object({
 	turn: playerSchema,
 	clock: clockSchema,
 	legalMoves: movesSchema,
+	status: gameStatusSchema,
 })
 
 const liveRoomMessageCodec = jsonCodec(
@@ -112,9 +121,9 @@ export function useLiveRoom({
 	onMove,
 }: {
 	roomId: RoomId
-	onSnapshot: (state: SnapshotMessage) => void
-	onStatus: (status: StatusMessage) => void
-	onMove: (state: MoveMessage) => void
+	onSnapshot: (message: SnapshotMessage) => void
+	onStatus: (message: StatusMessage) => void
+	onMove: (message: MoveMessage) => void
 }) {
 	const router = useRouter()
 	const ws = useRef<WebSocket | null>(null)

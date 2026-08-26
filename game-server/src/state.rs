@@ -1,4 +1,4 @@
-use std::{fmt, marker::ConstParamTy, ops::Not};
+use std::{marker::ConstParamTy, ops::Not};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,13 @@ pub(super) struct State {
 }
 
 impl Color {
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::White => "white",
+            Self::Black => "black",
+        }
+    }
+
     pub(super) const fn opponent(self) -> Self {
         match self {
             Self::White => Self::Black,
@@ -34,6 +41,13 @@ impl Color {
             "w" => Ok(Self::White),
             "b" => Ok(Self::Black),
             _ => bail!("invalid FEN active color: {value}"),
+        }
+    }
+
+    pub(super) const fn fen(self) -> &'static str {
+        match self {
+            Self::White => "w",
+            Self::Black => "b",
         }
     }
 }
@@ -89,6 +103,11 @@ impl EnPassant {
             Some(Square::new(self.0))
         }
     }
+
+    fn fen(self) -> String {
+        self.target()
+            .map_or_else(|| "-".to_owned(), |target| target.to_string())
+    }
 }
 
 impl State {
@@ -120,6 +139,15 @@ impl State {
             en_passant,
         })
     }
+
+    pub(super) fn fen(&self) -> String {
+        format!(
+            "{} {} {} 0 1",
+            self.turn.fen(),
+            self.castling_rights.fen(),
+            self.en_passant.fen()
+        )
+    }
 }
 
 const impl Not for Color {
@@ -127,37 +155,5 @@ const impl Not for Color {
 
     fn not(self) -> Self::Output {
         self.opponent()
-    }
-}
-
-impl fmt::Display for Color {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::White => 'w',
-                Self::Black => 'b',
-            }
-        )
-    }
-}
-
-impl fmt::Display for EnPassant {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.target() {
-            Some(target) => write!(f, "{target}"),
-            None => f.write_str("-"),
-        }
-    }
-}
-
-impl fmt::Display for State {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} 0 1",
-            self.turn, self.castling_rights, self.en_passant
-        )
     }
 }

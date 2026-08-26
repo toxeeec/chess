@@ -1,18 +1,57 @@
-use std::fmt;
-
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::{game::Game, moves::Move, state::Color};
+use crate::{moves::Move, state::Color};
 
-use super::state::{GameLifecycle, GameState, MakeMoveError};
+use super::state::{GameEndReason, GameLifecycle, GameState, MakeMoveError};
 
-#[derive(Clone, Copy)]
+#[wasm_bindgen(js_name = Color)]
+pub enum WasmColor {
+    White = "white",
+    Black = "black",
+}
+
+#[wasm_bindgen(js_name = GameEndReason)]
+pub enum WasmGameEndReason {
+    Checkmate = "checkmate",
+    Timeout = "timeout",
+    Disconnect = "disconnect",
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[wasm_bindgen]
+pub struct EndedStatus {
+    winner: Color,
+    reason: GameEndReason,
+}
+
+#[wasm_bindgen]
+impl EndedStatus {
+    #[wasm_bindgen(getter)]
+    pub fn winner(&self) -> WasmColor {
+        match self.winner {
+            Color::White => WasmColor::White,
+            Color::Black => WasmColor::Black,
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn reason(&self) -> WasmGameEndReason {
+        match self.reason {
+            GameEndReason::Checkmate => WasmGameEndReason::Checkmate,
+            GameEndReason::Timeout => WasmGameEndReason::Timeout,
+            GameEndReason::Disconnect => WasmGameEndReason::Disconnect,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 #[wasm_bindgen]
 pub enum GameStatus {
     Waiting = "waiting",
     Active = "active",
-    Ended = "ended",
+    Ended(EndedStatus),
     Expired = "expired",
 }
 
@@ -56,6 +95,7 @@ pub(super) struct MoveMessage {
     turn: Color,
     legal_moves: String,
     clock: Clock,
+    status: GameStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,36 +197,9 @@ impl From<GameLifecycle> for GameStatus {
         match lifecycle {
             GameLifecycle::Waiting { .. } => Self::Waiting,
             GameLifecycle::Active { .. } => Self::Active,
-            GameLifecycle::Ended => Self::Ended,
+            GameLifecycle::Ended { winner, reason } => Self::Ended(EndedStatus { winner, reason }),
             GameLifecycle::Expired => Self::Expired,
         }
-    }
-}
-
-impl Serialize for GameStatus {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(match self {
-            Self::Waiting => "waiting",
-            Self::Active => "active",
-            Self::Ended => "ended",
-            Self::Expired => "expired",
-            Self::__Invalid => unreachable!(),
-        })
-    }
-}
-
-impl fmt::Debug for GameStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Waiting => "Waiting",
-            Self::Active => "Active",
-            Self::Ended => "Ended",
-            Self::Expired => "Expired",
-            Self::__Invalid => "__Invalid",
-        })
     }
 }
 
@@ -201,13 +214,14 @@ impl From<MakeMoveError> for ErrorMessage {
 }
 
 impl MoveMessage {
-    pub(super) fn new(mve: Move, revision: u32, game: &Game, clock: Clock) -> Self {
+    pub(super) fn new(mve: Move, state: &GameState, now: i64) -> Self {
         Self {
-            revision,
+            revision: state.revision,
             mve: mve.to_string(),
-            turn: game.state.turn,
-            legal_moves: game.moves.to_string(),
-            clock,
+            turn: state.game.state.turn,
+            legal_moves: state.legal_moves().to_string(),
+            clock: Clock::new(state, now),
+            status: state.lifecycle.into(),
         }
     }
 }

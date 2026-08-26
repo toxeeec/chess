@@ -30,11 +30,14 @@ export function BoardSquare({ square }: { square: number }) {
 			store.pendingPromotion?.to === square,
 		]),
 	)
-	const [piece, isLegalMoveTarget, disabled] = useGameStore(
+	const [piece, isLegalMoveTarget, disabled, isCheckmatedKing] = useGameStore(
 		useShallow((store) => [
 			store.board[square],
 			store.legalMoves.some(({ to }) => to === square),
 			!store.legalMoves.some(({ from }) => from === square),
+			store.status.type === "ended" &&
+				store.status.reason === "checkmate" &&
+				store.board[square] === (store.status.winner === "white" ? "k" : "K"),
 		]),
 	)
 
@@ -51,6 +54,7 @@ export function BoardSquare({ square }: { square: number }) {
 				light ? "bg-neutral-300 inset-ring-neutral-400" : "bg-neutral-800 inset-ring-neutral-400",
 				isDropTarget && "inset-ring-[0.5vmin]",
 				isPromotionTarget && "[anchor-name:--promotion-square]",
+				isCheckmatedKing && "bg-red-600",
 			)}
 		>
 			{Square.file(square) === 0 && <Coordinate square={square} rank />}

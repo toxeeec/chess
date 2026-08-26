@@ -19,6 +19,11 @@ pub(super) enum MakeMoveError {
     NotYourTurn,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum GameResult {
+    Win { winner: Color },
+}
+
 pub(super) struct Game {
     pub(super) board: Board,
     pub(super) state: State,
@@ -41,7 +46,7 @@ impl Game {
             state,
             moves: MoveList::default(),
         };
-        game.add_moves();
+        game.generate_legal_moves();
 
         game
     }
@@ -57,10 +62,14 @@ impl Game {
     }
 
     pub(super) fn fen(&self) -> String {
-        format!("{} {}", self.board.fen(), self.state)
+        format!("{} {}", self.board.fen(), self.state.fen())
     }
 
-    pub(super) fn make_move(&mut self, color: Color, mve: Move) -> Result<(), MakeMoveError> {
+    pub(super) fn make_move(
+        &mut self,
+        color: Color,
+        mve: Move,
+    ) -> Result<Option<GameResult>, MakeMoveError> {
         if color != self.state.turn {
             return Err(MakeMoveError::NotYourTurn);
         }
@@ -87,19 +96,18 @@ impl Game {
         self.state.turn = self.state.turn.opponent();
 
         self.moves.clear();
-        self.add_moves();
-
-        Ok(())
+        let result = self.generate_legal_moves();
+        Ok(result)
     }
 
-    fn add_moves(&mut self) {
+    fn generate_legal_moves(&mut self) -> Option<GameResult> {
         match self.state.turn {
-            Color::White => self.add_moves_for::<{ Color::White }>(),
-            Color::Black => self.add_moves_for::<{ Color::Black }>(),
+            Color::White => self.generate_legal_moves_for::<{ Color::White }>(),
+            Color::Black => self.generate_legal_moves_for::<{ Color::Black }>(),
         }
     }
 
-    fn add_moves_for<const COLOR: Color>(&mut self)
+    fn generate_legal_moves_for<const COLOR: Color>(&mut self) -> Option<GameResult>
     where
         [(); { !COLOR } as usize]:,
         [(); { !(!COLOR) } as usize]:,
@@ -113,7 +121,6 @@ impl Game {
             forbidden,
             pin_rays,
         } = king_threats::<{ !COLOR }>(&self.board, occupied);
-
         let evasion_mask = evasion_mask(self.board.king_square::<COLOR>(), attackers);
 
         if !evasion_mask.empty() {
@@ -168,6 +175,8 @@ impl Game {
             self.state.castling_rights,
             &mut self.moves,
         );
+
+        (self.moves.is_empty() && !attackers.empty()).then_some(GameResult::Win { winner: !COLOR })
     }
 }
 
@@ -175,7 +184,7 @@ impl Game {
 mod tests {
     use crate::{square, test_utils::board};
 
-    use super::{CastlingRights, Color, EnPassant, Game, State};
+    use super::{CastlingRights, Color, EnPassant, Game, GameResult, State};
 
     fn has_move(game: &Game, mve: &str) -> bool {
         game.moves.contains(mve.parse().unwrap())
@@ -247,6 +256,28 @@ mod tests {
         );
         assert_eq!(game.state.turn, Color::Black);
         assert_eq!(game.moves.len(), 20);
+    }
+
+    #[test]
+    fn detects_checkmate_after_a_move() {
+        let mut game = Game::default();
+        for (color, mve, winner) in [
+            (Color::White, "f2f3", None),
+            (Color::Black, "e7e5", None),
+            (Color::White, "g2g4", None),
+            (
+                Color::Black,
+                "d8h4",
+                Some(GameResult::Win {
+                    winner: Color::Black,
+                }),
+            ),
+        ] {
+            assert!(matches!(
+                game.make_move(color, mve.parse().unwrap()),
+                Ok(result) if result == winner
+            ));
+        }
     }
 
     #[test]
@@ -343,7 +374,7 @@ mod tests {
             State::new(Color::White, CastlingRights::NONE),
         );
 
-        assert!(game.moves.len() > 0);
+        assert!(!game.moves.is_empty());
         assert!(game.moves.iter().all(|mve| mve.from == square!(e1)));
     }
 

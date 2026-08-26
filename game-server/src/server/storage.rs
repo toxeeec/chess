@@ -1,10 +1,10 @@
 use anyhow::Context;
 use serde::Deserialize;
-use worker::{Date, Result, SqlStorageValue, Storage};
+use worker::{Date, Result, Storage};
 
-use crate::game::Game;
+use crate::{game::Game, state::Color};
 
-use super::state::{GameClock, GameLifecycle, GameState, GameTimeouts};
+use super::state::{GameClock, GameEndReason, GameLifecycle, GameState, GameTimeouts};
 
 pub(super) struct GameStorage {
     inner: Storage,
@@ -23,6 +23,8 @@ enum GameStatus {
 struct SqlGameRow {
     revision: u32,
     status: GameStatus,
+    winner: Option<Color>,
+    end_reason: Option<GameEndReason>,
     fen: String,
     created_at: i64,
     white_disconnected_at: Option<i64>,
@@ -51,7 +53,7 @@ impl From<GameLifecycle> for GameStatus {
         match lifecycle {
             GameLifecycle::Waiting { .. } => Self::Waiting,
             GameLifecycle::Active { .. } => Self::Active,
-            GameLifecycle::Ended => Self::Ended,
+            GameLifecycle::Ended { .. } => Self::Ended,
             GameLifecycle::Expired => Self::Expired,
         }
     }
@@ -68,6 +70,8 @@ impl GameStorage {
                 id INTEGER PRIMARY KEY CHECK (id = 1), \
                 revision INTEGER NOT NULL, \
                 status TEXT NOT NULL CHECK (status IN ('waiting', 'active', 'ended', 'expired')), \
+                winner TEXT CHECK (winner IN ('white', 'black')), \
+                end_reason TEXT CHECK (end_reason IN ('checkmate', 'timeout', 'disconnect')), \
                 fen TEXT NOT NULL, \
                 created_at INTEGER NOT NULL, \
                 white_disconnected_at INTEGER, \
@@ -77,7 +81,31 @@ impl GameStorage {
                 first_move_timeout_ms INTEGER NOT NULL, \
                 disconnect_timeout_ms INTEGER NOT NULL, \
                 white_remaining_ms INTEGER NOT NULL, \
-                black_remaining_ms INTEGER NOT NULL\
+                black_remaining_ms INTEGER NOT NULL, \
+                CHECK (\
+                    (status = 'waiting' \
+                        AND turn_started_at IS NULL \
+                        AND white_disconnected_at IS NULL \
+                        AND black_disconnected_at IS NULL \
+                        AND winner IS NULL \
+                        AND end_reason IS NULL) \
+                    OR (status = 'active' \
+                        AND turn_started_at IS NOT NULL \
+                        AND winner IS NULL \
+                        AND end_reason IS NULL) \
+                    OR (status = 'ended' \
+                        AND turn_started_at IS NULL \
+                        AND white_disconnected_at IS NULL \
+                        AND black_disconnected_at IS NULL \
+                        AND winner IS NOT NULL \
+                        AND end_reason IS NOT NULL) \
+                    OR (status = 'expired' \
+                        AND turn_started_at IS NULL \
+                        AND white_disconnected_at IS NULL \
+                        AND black_disconnected_at IS NULL \
+                        AND winner IS NULL \
+                        AND end_reason IS NULL)\
+                )\
             );",
             None,
         )?;
@@ -93,6 +121,8 @@ impl GameStorage {
                 "SELECT \
                     revision, \
                     status, \
+                    winner, \
+                    end_reason, \
                     fen, \
                     created_at, \
                     white_disconnected_at, \
@@ -131,6 +161,8 @@ impl GameStorage {
                 id, \
                 revision, \
                 status, \
+                winner, \
+                end_reason, \
                 fen, \
                 created_at, \
                 join_timeout_ms, \
@@ -138,16 +170,16 @@ impl GameStorage {
                 disconnect_timeout_ms, \
                 white_remaining_ms, \
                 black_remaining_ms\
-             ) VALUES (1, 0, 'waiting', ?, ?, ?, ?, ?, ?, ?) \
+			) VALUES (1, 0, 'waiting', NULL, NULL, ?, ?, ?, ?, ?, ?, ?) \
              ON CONFLICT(id) DO NOTHING;",
             vec![
-                SqlStorageValue::from(game.fen()),
-                SqlStorageValue::from(created_at),
-                SqlStorageValue::from(join_timeout_ms),
-                SqlStorageValue::from(first_move_timeout_ms),
-                SqlStorageValue::from(disconnect_timeout_ms),
-                SqlStorageValue::from(white_remaining_ms),
-                SqlStorageValue::from(black_remaining_ms),
+                game.fen().into(),
+                created_at.into(),
+                join_timeout_ms.into(),
+                first_move_timeout_ms.into(),
+                disconnect_timeout_ms.into(),
+                white_remaining_ms.into(),
+                black_remaining_ms.into(),
             ],
         )?;
 
@@ -172,6 +204,8 @@ impl GameStorage {
             "UPDATE game SET \
                 revision = ?, \
                 status = ?, \
+                winner = ?, \
+                end_reason = ?, \
                 fen = ?, \
                 white_disconnected_at = ?, \
                 black_disconnected_at = ?, \
@@ -180,14 +214,16 @@ impl GameStorage {
                 black_remaining_ms = ? \
              WHERE id = 1;",
             vec![
-                SqlStorageValue::from(state.revision as i32),
-                SqlStorageValue::from(GameStatus::from(state.lifecycle).as_str()),
-                SqlStorageValue::from(state.game.fen()),
-                SqlStorageValue::from(state.white_disconnected_at()),
-                SqlStorageValue::from(state.black_disconnected_at()),
-                SqlStorageValue::from(state.turn_started_at()),
-                SqlStorageValue::from(state.clock.white_remaining_ms),
-                SqlStorageValue::from(state.clock.black_remaining_ms),
+                (state.revision as i32).into(),
+                GameStatus::from(state.lifecycle).as_str().into(),
+                state.winner().map(Color::as_str).into(),
+                state.end_reason().map(GameEndReason::as_str).into(),
+                state.game.fen().into(),
+                state.white_disconnected_at().into(),
+                state.black_disconnected_at().into(),
+                state.turn_started_at().into(),
+                state.clock.white_remaining_ms.into(),
+                state.clock.black_remaining_ms.into(),
             ],
         )?;
 
@@ -227,7 +263,19 @@ impl TryFrom<SqlGameRow> for GameState {
                     black_disconnected_at: row.black_disconnected_at,
                 }
             }
-            GameStatus::Ended => GameLifecycle::Ended,
+            GameStatus::Ended => {
+                let Some(winner) = row.winner else {
+                    return Err(worker::Error::RustError(
+                        "ended game row must have a winner".to_string(),
+                    ));
+                };
+                let Some(reason) = row.end_reason else {
+                    return Err(worker::Error::RustError(
+                        "ended game row must have an end reason".to_string(),
+                    ));
+                };
+                GameLifecycle::Ended { winner, reason }
+            }
             GameStatus::Expired => GameLifecycle::Expired,
         };
 
