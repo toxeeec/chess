@@ -5,7 +5,7 @@ use crate::{
     knight::KNIGHT_ATTACKS,
     magics::{bishop_attacks, rook_attacks},
     square::Square,
-    state::Color,
+    state::{Color, OPPONENT},
 };
 
 pub(super) struct KingThreats {
@@ -48,13 +48,10 @@ impl PinRays {
     }
 }
 
-pub(super) fn king_threats<const ENEMY: Color>(board: &Board, occupied: Bitboard) -> KingThreats
-where
-    [(); { !ENEMY } as usize]:,
-{
-    let king = board.king::<{ !ENEMY }>();
-    let king_square = board.king_square::<{ !ENEMY }>();
-    let blockers = board.occupancy::<{ !ENEMY }>();
+pub(super) fn king_threats<const ENEMY: Color>(board: &Board, occupied: Bitboard) -> KingThreats {
+    let king = board.king::<{ OPPONENT::<ENEMY> }>();
+    let king_square = board.king_square::<{ OPPONENT::<ENEMY> }>();
+    let blockers = board.occupancy::<{ OPPONENT::<ENEMY> }>();
     let occupied = occupied & !king;
 
     let diagonal_sliders = board.bishops::<ENEMY>() | board.queens::<ENEMY>();
@@ -62,7 +59,8 @@ where
     let diagonal_attacks = bishop_attacks(king_square, occupied);
     let orthogonal_attacks = rook_attacks(king_square, occupied);
 
-    let pawn_attackers = (king.forward_west::<{ !ENEMY }>() | king.forward_east::<{ !ENEMY }>())
+    let pawn_attackers = (king.forward_west::<{ OPPONENT::<ENEMY> }>()
+        | king.forward_east::<{ OPPONENT::<ENEMY> }>())
         & board.pawns::<ENEMY>();
     let attackers = pawn_attackers
         | (KNIGHT_ATTACKS[king_square] & board.knights::<ENEMY>())

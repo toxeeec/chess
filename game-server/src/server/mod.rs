@@ -4,7 +4,10 @@ mod storage;
 
 pub use messages::SnapshotMessage;
 
-use std::cell::{Ref, RefCell, RefMut};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    panic::AssertUnwindSafe,
+};
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use worker::{
@@ -25,7 +28,7 @@ const COLOR_HEADER: &str = "Player-Color";
 
 #[durable_object]
 pub struct GameServer {
-    state: RefCell<Option<GameState>>,
+    state: AssertUnwindSafe<RefCell<Option<GameState>>>,
     storage: GameStorage,
     durable_state: State,
 }
@@ -72,7 +75,7 @@ impl DurableObject for GameServer {
         let state = storage.load().unwrap();
 
         Self {
-            state: RefCell::new(state),
+            state: AssertUnwindSafe(RefCell::new(state)),
             storage,
             durable_state,
         }

@@ -12,6 +12,8 @@ pub(super) enum Color {
     Black,
 }
 
+pub(super) const OPPONENT<const COLOR: Color>: Color = !COLOR;
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) struct EnPassant(u32);
 

@@ -5,7 +5,7 @@ use crate::{
     magics::{bishop_attacks, rook_attacks},
     moves::{Move, MoveList, PromotionPiece},
     square::Square,
-    state::{Color, EnPassant},
+    state::{Color, EnPassant, OPPONENT},
 };
 
 pub(super) fn add_pawn_moves<const COLOR: Color>(
@@ -16,9 +16,7 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
     pin_rays: PinRays,
     en_passant: EnPassant,
     list: &mut MoveList,
-) where
-    [(); { !COLOR } as usize]:,
-{
+) {
     let pawns = board.pawns::<COLOR>();
     let pinned = pin_rays.pinned_pieces(pawns);
     let unpinned = pawns & !pinned;
@@ -102,14 +100,13 @@ fn en_passant_is_legal<const COLOR: Color>(
     from: Square,
     to: Square,
     captured: Square,
-) -> bool
-where
-    [(); { !COLOR } as usize]:,
-{
+) -> bool {
     let king = board.king_square::<COLOR>();
     let occupied = (occupied & !Bitboard::from([from, captured])) | Bitboard::from(to);
-    let diagonal_sliders = board.bishops::<{ !COLOR }>() | board.queens::<{ !COLOR }>();
-    let orthogonal_sliders = board.rooks::<{ !COLOR }>() | board.queens::<{ !COLOR }>();
+    let diagonal_sliders =
+        board.bishops::<{ OPPONENT::<COLOR> }>() | board.queens::<{ OPPONENT::<COLOR> }>();
+    let orthogonal_sliders =
+        board.rooks::<{ OPPONENT::<COLOR> }>() | board.queens::<{ OPPONENT::<COLOR> }>();
 
     (bishop_attacks(king, occupied) & diagonal_sliders).empty()
         && (rook_attacks(king, occupied) & orthogonal_sliders).empty()
@@ -129,10 +126,7 @@ mod tests {
 
     use super::add_pawn_moves;
 
-    fn pawn_moves<const COLOR: Color>(board: Board, pin_rays: PinRays) -> MoveList
-    where
-        [(); { !COLOR } as usize]:,
-    {
+    fn pawn_moves<const COLOR: Color>(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
         let blockers = board.occupancy::<COLOR>();
         let occupied = board.occupied();

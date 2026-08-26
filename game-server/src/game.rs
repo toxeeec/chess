@@ -11,7 +11,7 @@ use crate::{
     pawn::add_pawn_moves,
     queen::add_queen_moves,
     rook::add_rook_moves,
-    state::{Color, EnPassant, State},
+    state::{Color, EnPassant, OPPONENT, State},
 };
 
 pub(super) enum MakeMoveError {
@@ -108,20 +108,16 @@ impl Game {
         }
     }
 
-    fn generate_legal_moves_for<const COLOR: Color>(&mut self) -> Option<GameResult>
-    where
-        [(); { !COLOR } as usize]:,
-        [(); { !(!COLOR) } as usize]:,
-    {
+    fn generate_legal_moves_for<const COLOR: Color>(&mut self) -> Option<GameResult> {
         let blockers = self.board.occupancy::<COLOR>();
-        let enemy = self.board.occupancy::<{ !COLOR }>();
+        let enemy = self.board.occupancy::<{ OPPONENT::<COLOR> }>();
         let occupied = blockers | enemy;
         let empty = !occupied;
         let KingThreats {
             attackers,
             forbidden,
             pin_rays,
-        } = king_threats::<{ !COLOR }>(&self.board, occupied);
+        } = king_threats::<{ OPPONENT::<COLOR> }>(&self.board, occupied);
         let evasion_mask = evasion_mask(self.board.king_square::<COLOR>(), attackers);
 
         if !evasion_mask.empty() {

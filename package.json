@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"build": "vite build",
-		"build:game-server": "cargo build --manifest-path game-server/Cargo.toml --target wasm32-unknown-unknown && wasm-bindgen game-server/target/wasm32-unknown-unknown/debug/game_server.wasm --target module --typescript --out-dir game-server/build --experimental-reset-state-function && node scripts/patchGameServerWasmImport.mjs",
+		"build:game-server": "RUSTFLAGS='-Cpanic=unwind' cargo build --manifest-path game-server/Cargo.toml --target wasm32-unknown-unknown -Zbuild-std=std,panic_unwind && wasm-bindgen game-server/target/wasm32-unknown-unknown/debug/game_server.wasm --target module --typescript --out-dir game-server/build --experimental-reset-state-function && node scripts/patchGameServerWasmImport.mjs",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"deploy": "pnpm run build && wrangler deploy",

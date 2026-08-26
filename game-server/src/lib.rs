@@ -5,7 +5,10 @@
     const_convert,
     const_index,
     const_ops,
-    generic_const_exprs,
+    generic_const_args,
+    generic_const_items,
+    macroless_generic_const_args,
+    min_generic_const_args,
     trusted_len
 )]
 

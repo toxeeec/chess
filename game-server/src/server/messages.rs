@@ -86,7 +86,7 @@ pub enum GameStatus {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct Clock {
     #[wasm_bindgen(js_name = "whiteRemainingMs")]
     pub white_remaining_ms: i32,
@@ -97,13 +97,16 @@ pub struct Clock {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct SnapshotMessage {
     pub revision: u32,
+    #[wasm_bindgen(getter_with_clone)]
     pub fen: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub status: GameStatus,
+    #[wasm_bindgen(getter_with_clone)]
     pub clock: Clock,
-    #[wasm_bindgen(js_name = "legalMoves")]
+    #[wasm_bindgen(js_name = "legalMoves", getter_with_clone)]
     pub legal_moves: String,
 }
 
