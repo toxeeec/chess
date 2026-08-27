@@ -24,6 +24,8 @@ pub(super) struct Move {
 
 pub(crate) struct MoveList(Vec<Move>);
 
+const MAX_LEGAL_MOVES: usize = 218;
+
 impl PromotionPiece {
     pub(super) const ALL: [Self; 4] = [Self::Queen, Self::Rook, Self::Bishop, Self::Knight];
 }
@@ -185,7 +187,7 @@ impl fmt::Display for MoveList {
 
 impl Default for MoveList {
     fn default() -> Self {
-        Self(Vec::with_capacity(32))
+        Self(Vec::with_capacity(MAX_LEGAL_MOVES))
     }
 }
 

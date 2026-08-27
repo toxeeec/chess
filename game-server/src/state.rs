@@ -17,6 +17,7 @@ pub(super) const OPPONENT<const COLOR: Color>: Color = !COLOR;
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) struct EnPassant(u32);
 
+#[derive(Clone, Copy)]
 pub(super) struct State {
     pub(super) turn: Color,
     pub(super) castling_rights: CastlingRights,

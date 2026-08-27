@@ -31,4 +31,5 @@ mod state;
 #[cfg(test)]
 mod test_utils;
 
+pub use game::Game;
 pub use server::{GameServer, SnapshotMessage};

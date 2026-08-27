@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use crate::{
     attacks::{KingThreats, evasion_mask, king_threats},
     bishop::add_bishop_moves,
-    board::Board,
+    board::{Board, Piece},
     castling::CastlingRights,
     king::add_king_moves,
     knight::add_knight_moves,
@@ -13,6 +13,9 @@ use crate::{
     rook::add_rook_moves,
     state::{Color, EnPassant, OPPONENT, State},
 };
+
+#[cfg(test)]
+use crate::board::BoardUndo;
 
 pub(super) enum MakeMoveError {
     IllegalMove,
@@ -25,10 +28,18 @@ pub(super) enum GameResult {
     Draw,
 }
 
-pub(super) struct Game {
+pub struct Game {
     pub(super) board: Board,
     pub(super) state: State,
     pub(super) moves: MoveList,
+}
+
+#[derive(Clone, Copy)]
+struct Undo {
+    #[cfg(test)]
+    state: State,
+    #[cfg(test)]
+    board: BoardUndo,
 }
 
 impl Default for Game {
@@ -47,7 +58,7 @@ impl Game {
             state,
             moves: MoveList::default(),
         };
-        game.generate_legal_moves();
+        generate_legal_moves(&game.board, game.state, &mut game.moves);
 
         game
     }
@@ -79,120 +90,266 @@ impl Game {
             return Err(MakeMoveError::IllegalMove);
         }
 
-        self.state.castling_rights.update(mve.from, mve.to);
-        let is_pawn = (self.board.pawns::<{ Color::White }>()
-            | self.board.pawns::<{ Color::Black }>())
-        .contains(mve.from);
-        let en_passant = if is_pawn && mve.from.rank().abs_diff(mve.to.rank()) == 2 {
-            EnPassant::new(match self.state.turn {
+        apply_move(&mut self.board, &mut self.state, mve);
+        Ok(generate_legal_moves(
+            &self.board,
+            self.state,
+            &mut self.moves,
+        ))
+    }
+
+    #[cfg(test)]
+    fn perft(&self, depth: u32) -> u64 {
+        if depth == 0 {
+            return 1;
+        }
+        if depth == 1 {
+            return self.moves.len() as u64;
+        }
+
+        let mut board = self.board;
+        let mut state = self.state;
+        let mut move_lists = std::iter::repeat_with(MoveList::default)
+            .take(depth as usize - 1)
+            .collect::<Vec<_>>();
+
+        self.moves
+            .iter()
+            .map(|mve| {
+                let undo = apply_move(&mut board, &mut state, mve);
+                let nodes = perft(&mut board, &mut state, depth - 1, move_lists.as_mut_slice());
+                undo_move(&mut board, &mut state, mve, undo);
+                nodes
+            })
+            .sum()
+    }
+}
+
+fn generate_legal_moves(board: &Board, state: State, moves: &mut MoveList) -> Option<GameResult> {
+    moves.clear();
+    match state.turn {
+        Color::White => generate_legal_moves_for::<{ Color::White }>(board, state, moves),
+        Color::Black => generate_legal_moves_for::<{ Color::Black }>(board, state, moves),
+    }
+}
+
+fn generate_legal_moves_for<const COLOR: Color>(
+    board: &Board,
+    state: State,
+    moves: &mut MoveList,
+) -> Option<GameResult> {
+    let blockers = board.occupancy::<COLOR>();
+    let enemy = board.occupancy::<{ OPPONENT::<COLOR> }>();
+    let occupied = blockers | enemy;
+    let empty = !occupied;
+    let KingThreats {
+        attackers,
+        forbidden,
+        pin_rays,
+    } = king_threats::<{ OPPONENT::<COLOR> }>(board, occupied);
+    let evasion_mask = evasion_mask(board.king_square::<COLOR>(), attackers);
+
+    if !evasion_mask.empty() {
+        add_pawn_moves::<COLOR>(
+            board,
+            empty,
+            enemy,
+            evasion_mask,
+            pin_rays,
+            state.en_passant,
+            moves,
+        );
+        add_knight_moves::<COLOR>(board, blockers, evasion_mask, pin_rays, moves);
+        add_bishop_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
+        add_rook_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
+        add_queen_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
+    }
+
+    add_king_moves::<COLOR>(
+        board,
+        occupied,
+        blockers,
+        attackers,
+        forbidden,
+        state.castling_rights,
+        moves,
+    );
+
+    if moves.is_empty() {
+        Some(if attackers.empty() {
+            GameResult::Draw
+        } else {
+            GameResult::Win { winner: !COLOR }
+        })
+    } else {
+        None
+    }
+}
+
+fn apply_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
+    let previous_state = *state;
+    let board_undo = board.make_move(previous_state.turn, mve, previous_state.en_passant.target());
+
+    state.castling_rights.update(mve.from, mve.to);
+    state.en_passant =
+        if board_undo.moved == Piece::Pawn && mve.from.rank().abs_diff(mve.to.rank()) == 2 {
+            EnPassant::new(match previous_state.turn {
                 Color::White => mve.to.backward::<{ Color::White }, 1>(),
                 Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
             })
         } else {
             EnPassant::NONE
         };
+    state.turn = previous_state.turn.opponent();
 
-        self.board.apply_move(self.state.turn, mve);
-        self.state.en_passant = en_passant;
-        self.state.turn = self.state.turn.opponent();
+    Undo {
+        #[cfg(test)]
+        state: previous_state,
+        #[cfg(test)]
+        board: board_undo,
+    }
+}
 
-        self.moves.clear();
-        let result = self.generate_legal_moves();
-        Ok(result)
+#[cfg(test)]
+fn undo_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
+    board.unmake_move(
+        undo.state.turn,
+        mve,
+        undo.state.en_passant.target(),
+        undo.board,
+    );
+    *state = undo.state;
+}
+
+#[cfg(test)]
+fn perft(board: &mut Board, state: &mut State, depth: u32, move_lists: &mut [MoveList]) -> u64 {
+    let (moves, child_move_lists) = move_lists
+        .split_first_mut()
+        .expect("perft must allocate one move list per searched ply");
+    generate_legal_moves(board, *state, moves);
+
+    if depth == 1 {
+        return moves.len() as u64;
     }
 
-    fn generate_legal_moves(&mut self) -> Option<GameResult> {
-        match self.state.turn {
-            Color::White => self.generate_legal_moves_for::<{ Color::White }>(),
-            Color::Black => self.generate_legal_moves_for::<{ Color::Black }>(),
-        }
-    }
-
-    fn generate_legal_moves_for<const COLOR: Color>(&mut self) -> Option<GameResult> {
-        let blockers = self.board.occupancy::<COLOR>();
-        let enemy = self.board.occupancy::<{ OPPONENT::<COLOR> }>();
-        let occupied = blockers | enemy;
-        let empty = !occupied;
-        let KingThreats {
-            attackers,
-            forbidden,
-            pin_rays,
-        } = king_threats::<{ OPPONENT::<COLOR> }>(&self.board, occupied);
-        let evasion_mask = evasion_mask(self.board.king_square::<COLOR>(), attackers);
-
-        if !evasion_mask.empty() {
-            add_pawn_moves::<COLOR>(
-                &self.board,
-                empty,
-                enemy,
-                evasion_mask,
-                pin_rays,
-                self.state.en_passant,
-                &mut self.moves,
-            );
-            add_knight_moves::<COLOR>(
-                &self.board,
-                blockers,
-                evasion_mask,
-                pin_rays,
-                &mut self.moves,
-            );
-            add_bishop_moves::<COLOR>(
-                &self.board,
-                occupied,
-                blockers,
-                evasion_mask,
-                pin_rays,
-                &mut self.moves,
-            );
-            add_rook_moves::<COLOR>(
-                &self.board,
-                occupied,
-                blockers,
-                evasion_mask,
-                pin_rays,
-                &mut self.moves,
-            );
-            add_queen_moves::<COLOR>(
-                &self.board,
-                occupied,
-                blockers,
-                evasion_mask,
-                pin_rays,
-                &mut self.moves,
-            );
-        }
-
-        add_king_moves::<COLOR>(
-            &self.board,
-            occupied,
-            blockers,
-            attackers,
-            forbidden,
-            self.state.castling_rights,
-            &mut self.moves,
-        );
-
-        if self.moves.is_empty() {
-            Some(if attackers.empty() {
-                GameResult::Draw
-            } else {
-                GameResult::Win { winner: !COLOR }
-            })
-        } else {
-            None
-        }
-    }
+    moves
+        .iter()
+        .map(|mve| {
+            let undo = apply_move(board, state, mve);
+            let nodes = perft(board, state, depth - 1, child_move_lists);
+            undo_move(board, state, mve, undo);
+            nodes
+        })
+        .sum()
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{square, test_utils::board};
 
-    use super::{CastlingRights, Color, EnPassant, Game, GameResult, State};
+    use super::{
+        CastlingRights, Color, EnPassant, Game, GameResult, MoveList, State, apply_move,
+        generate_legal_moves, undo_move,
+    };
 
     fn has_move(game: &Game, mve: &str) -> bool {
         game.moves.contains(mve.parse().unwrap())
+    }
+
+    fn assert_perft(fen: &str, expected: &[u64]) {
+        let game = Game::from_fen(fen).unwrap();
+        for (index, nodes) in expected.iter().copied().enumerate() {
+            let depth = index as u32 + 1;
+            assert_eq!(game.perft(depth), nodes, "perft depth {depth}");
+        }
+    }
+
+    #[test]
+    fn make_unmake_restores_every_move_type() {
+        for (fen, mve) in [
+            (
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                "e2e4",
+            ),
+            ("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5"),
+            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e5d6"),
+            ("4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1", "e4d3"),
+            ("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1"),
+            ("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1c1"),
+            ("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8g8"),
+            ("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8c8"),
+            ("7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8n"),
+            ("1r5k/P7/8/8/8/8/8/K7 w - - 0 1", "a7b8q"),
+            ("7k/8/8/8/8/8/p7/7K b - - 0 1", "a2a1r"),
+            ("7k/8/8/8/8/8/1p6/B6K b - - 0 1", "b2a1b"),
+            ("r3k3/8/8/8/8/8/8/R3K3 b Qq - 0 1", "a8a1"),
+            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e1e2"),
+        ] {
+            let game = Game::from_fen(fen).unwrap();
+            let mve = mve.parse().unwrap();
+            assert!(game.moves.contains(mve), "{mve} must be legal in {fen}");
+
+            let mut board = game.board;
+            let mut state = game.state;
+            let undo = apply_move(&mut board, &mut state, mve);
+            undo_move(&mut board, &mut state, mve, undo);
+
+            assert_eq!(format!("{} {}", board.fen(), state.fen()), game.fen());
+            let mut restored_moves = MoveList::default();
+            generate_legal_moves(&board, state, &mut restored_moves);
+            assert_eq!(
+                restored_moves.iter().collect::<Vec<_>>(),
+                game.moves.iter().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn perft_initial_position() {
+        assert_perft(
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            &[20, 400, 8_902, 197_281, 4_865_609],
+        );
+    }
+
+    #[test]
+    fn perft_kiwipete() {
+        assert_perft(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            &[48, 2_039, 97_862, 4_085_603],
+        );
+    }
+
+    #[test]
+    fn perft_endgame_with_en_passant() {
+        assert_perft(
+            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+            &[14, 191, 2_812, 43_238, 674_624, 11_030_083],
+        );
+    }
+
+    #[test]
+    fn perft_promotions_and_castling() {
+        assert_perft(
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            &[6, 264, 9_467, 422_333, 15_833_292],
+        );
+    }
+
+    #[test]
+    fn perft_tactical_promotions() {
+        assert_perft(
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            &[44, 1_486, 62_379, 2_103_487],
+        );
+    }
+
+    #[test]
+    fn perft_pins_and_discovered_attacks() {
+        assert_perft(
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+            &[46, 2_079, 89_890, 3_894_594],
+        );
     }
 
     #[test]
@@ -330,6 +487,40 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(capture.fen(), "4k3/8/8/8/8/8/8/r3K3 w - - 0 1");
+    }
+
+    #[test]
+    fn castling_gives_check() {
+        for (fen, castle, evasion) in [
+            ("5k2/p7/8/8/8/8/8/4K2R w K - 0 1", "e1g1", "f8e7"),
+            ("3k4/p7/8/8/8/8/8/R3K3 w Q - 0 1", "e1c1", "d8e7"),
+        ] {
+            let mut game = Game::from_fen(fen).unwrap();
+            assert!(
+                game.make_move(Color::White, castle.parse().unwrap())
+                    .is_ok()
+            );
+
+            assert!(has_move(&game, evasion));
+            assert!(!has_move(&game, "a7a6"));
+            assert!(!has_move(&game, "a7a5"));
+        }
+    }
+
+    #[test]
+    fn replacing_a_captured_home_rook_does_not_restore_castling_rights() {
+        let mut game = Game::from_fen("4k3/8/8/8/8/8/Rb6/R3K3 b Q - 0 1").unwrap();
+
+        for (color, mve) in [
+            (Color::Black, "b2a1"),
+            (Color::White, "a2a1"),
+            (Color::Black, "e8e7"),
+        ] {
+            assert!(game.make_move(color, mve.parse().unwrap()).is_ok());
+        }
+
+        assert_eq!(game.state.castling_rights.fen(), "-");
+        assert!(!has_move(&game, "e1c1"));
     }
 
     #[test]
@@ -649,6 +840,43 @@ mod tests {
     }
 
     #[test]
+    fn en_passant_evades_a_check_caused_by_a_double_push() {
+        for (push, en_passant) in [("d7d5", "e5d6"), ("f7f5", "e5f6")] {
+            let mut game = Game::from_fen("4k3/3p1p2/8/4P3/4K3/8/8/8 b - - 0 1").unwrap();
+
+            assert!(game.make_move(Color::Black, push.parse().unwrap()).is_ok());
+
+            assert!(has_move(&game, en_passant));
+        }
+    }
+
+    #[test]
+    fn en_passant_can_open_a_discovered_check() {
+        let board = board!(
+            . . . . . . . .
+            p . . . . k . .
+            . . . . . . . .
+            . . P p . . . .
+            . . B . . . . .
+            . K . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+        );
+        let mut state = State::new(Color::White, CastlingRights::NONE);
+        state.en_passant = EnPassant::new(square!(d6));
+        let mut game = Game::new(board, state);
+
+        assert!(
+            game.make_move(Color::White, "c5d6".parse().unwrap())
+                .is_ok()
+        );
+
+        assert!(has_move(&game, "f7e8"));
+        assert!(!has_move(&game, "a7a6"));
+        assert!(!has_move(&game, "a7a5"));
+    }
+
+    #[test]
     fn standard_fen_keeps_an_en_passant_target_without_a_capturer() {
         let mut game = Game::default();
         assert!(
@@ -694,6 +922,47 @@ mod tests {
             );
             assert_eq!(game.fen(), expected);
         }
+    }
+
+    #[test]
+    fn promotion_can_evade_check() {
+        let game = Game::from_fen("2K2r2/4P3/8/8/8/8/8/3k4 w - - 0 1").unwrap();
+
+        for mve in ["e7e8q", "e7e8r", "e7e8b", "e7e8n"] {
+            assert!(has_move(&game, mve));
+        }
+    }
+
+    #[test]
+    fn knight_underpromotion_gives_check() {
+        let board = board!(
+            . . . . . . . .
+            P . k . . . . p
+            K . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+            . . . . . . . .
+        );
+
+        let mut knight = Game::new(board, State::new(Color::White, CastlingRights::NONE));
+        assert!(
+            knight
+                .make_move(Color::White, "a7a8n".parse().unwrap())
+                .is_ok()
+        );
+        assert!(!has_move(&knight, "h7h6"));
+        assert!(!has_move(&knight, "h7h5"));
+
+        let mut queen = Game::new(board, State::new(Color::White, CastlingRights::NONE));
+        assert!(
+            queen
+                .make_move(Color::White, "a7a8q".parse().unwrap())
+                .is_ok()
+        );
+        assert!(has_move(&queen, "h7h6"));
+        assert!(has_move(&queen, "h7h5"));
     }
 
     #[test]

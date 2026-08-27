@@ -113,12 +113,8 @@ impl Bitboard {
     }
 
     pub(super) fn apply_move(&mut self, from: Square, to: Square) {
-        let from_mask = Self::from(from).0;
-        let to_mask = Self::from(to).0;
-        let add_mask = ((self.0 & from_mask) >> usize::from(from)).wrapping_neg() & to_mask;
-
-        self.0 &= !(from_mask | to_mask);
-        self.0 |= add_mask;
+        self.0 &= !Self::from(from).0;
+        self.0 |= Self::from(to).0;
     }
 }
 

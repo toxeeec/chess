@@ -11,6 +11,12 @@ use crate::{
     state::Color,
 };
 
+const CASTLING_ROOK_MOVES: [[(Square, Square); 2]; 2] = [
+    [(square!(a1), square!(d1)), (square!(h1), square!(f1))],
+    [(square!(a8), square!(d8)), (square!(h8), square!(f8))],
+];
+
+#[derive(Clone, Copy)]
 pub(super) struct Board {
     white_pawns: Bitboard,
     white_rooks: Bitboard,
@@ -24,6 +30,23 @@ pub(super) struct Board {
     black_bishops: Bitboard,
     black_queens: Bitboard,
     black_king: Bitboard,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Piece {
+    Pawn,
+    Rook,
+    Knight,
+    Bishop,
+    Queen,
+    King,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct BoardUndo {
+    pub(super) moved: Piece,
+    #[cfg(test)]
+    captured: Option<Piece>,
 }
 
 impl Default for Board {
@@ -226,42 +249,84 @@ impl Board {
         }
     }
 
-    pub(super) fn apply_move(&mut self, color: Color, mve: Move) {
-        const CASTLING_ROOK_MOVES: [[(Square, Square); 2]; 2] = [
-            [(square!(a1), square!(d1)), (square!(h1), square!(f1))],
-            [(square!(a8), square!(d8)), (square!(h8), square!(f8))],
-        ];
-
-        let is_castling = (self.white_king | self.black_king).contains(mve.from)
-            & (mve.from.file().abs_diff(mve.to.file()) == 2);
-        let is_en_passant = (self.white_pawns | self.black_pawns).contains(mve.from)
-            & (mve.from.file() != mve.to.file())
-            & !self.occupied().contains(mve.to);
-
-        if is_en_passant {
-            let captured = match color {
+    pub(super) fn make_move(
+        &mut self,
+        color: Color,
+        mve: Move,
+        en_passant: Option<Square>,
+    ) -> BoardUndo {
+        let moved = self
+            .piece_at_for(color, mve.from)
+            .expect("legal move must have a moving piece");
+        let is_en_passant = moved == Piece::Pawn && Some(mve.to) == en_passant;
+        let captured_square = if is_en_passant {
+            match color {
                 Color::White => mve.to.backward::<{ Color::White }, 1>(),
                 Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
-            };
-            self.white_pawns &= !Bitboard::from(captured);
-            self.black_pawns &= !Bitboard::from(captured);
+            }
+        } else {
+            mve.to
+        };
+        let captured = self.piece_at_for(color.opponent(), captured_square);
+        if let Some(captured) = captured {
+            *self.pieces_mut(color.opponent(), captured) &= !Bitboard::from(captured_square);
         }
 
-        self.for_each_bb_mut(|piece| {
-            piece.apply_move(mve.from, mve.to);
-        });
+        self.pieces_mut(color, moved).apply_move(mve.from, mve.to);
 
-        if is_castling {
+        if moved == Piece::King && mve.from.file().abs_diff(mve.to.file()) == 2 {
             let king_side = (mve.to.file() > mve.from.file()) as usize;
             let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color as usize][king_side];
-            match color {
-                Color::White => self.white_rooks.apply_move(rook_from, rook_to),
-                Color::Black => self.black_rooks.apply_move(rook_from, rook_to),
-            }
+            self.pieces_mut(color, Piece::Rook)
+                .apply_move(rook_from, rook_to);
         }
 
         if let Some(promotion) = mve.promotion {
-            self.promote(color, promotion, mve.to);
+            debug_assert_eq!(moved, Piece::Pawn);
+            *self.pieces_mut(color, Piece::Pawn) &= !Bitboard::from(mve.to);
+            *self.pieces_mut(color, promotion.into()) |= mve.to;
+        }
+
+        BoardUndo {
+            moved,
+            #[cfg(test)]
+            captured,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn unmake_move(
+        &mut self,
+        color: Color,
+        mve: Move,
+        en_passant: Option<Square>,
+        undo: BoardUndo,
+    ) {
+        if undo.moved == Piece::King && mve.from.file().abs_diff(mve.to.file()) == 2 {
+            let king_side = (mve.to.file() > mve.from.file()) as usize;
+            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color as usize][king_side];
+            self.pieces_mut(color, Piece::Rook)
+                .apply_move(rook_to, rook_from);
+        }
+
+        if let Some(promotion) = mve.promotion {
+            *self.pieces_mut(color, promotion.into()) &= !Bitboard::from(mve.to);
+            *self.pieces_mut(color, Piece::Pawn) |= mve.from;
+        } else {
+            self.pieces_mut(color, undo.moved)
+                .apply_move(mve.to, mve.from);
+        }
+
+        if let Some(captured) = undo.captured {
+            let captured_square = if undo.moved == Piece::Pawn && Some(mve.to) == en_passant {
+                match color {
+                    Color::White => mve.to.backward::<{ Color::White }, 1>(),
+                    Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
+                }
+            } else {
+                mve.to
+            };
+            *self.pieces_mut(color.opponent(), captured) |= captured_square;
         }
     }
 
@@ -302,48 +367,51 @@ impl Board {
         self.occupancy::<{ Color::White }>() | self.occupancy::<{ Color::Black }>()
     }
 
-    fn for_each_bb_mut(&mut self, mut f: impl FnMut(&mut Bitboard)) {
-        f(&mut self.white_pawns);
-        f(&mut self.white_rooks);
-        f(&mut self.white_knights);
-        f(&mut self.white_bishops);
-        f(&mut self.white_queens);
-        f(&mut self.white_king);
-        f(&mut self.black_pawns);
-        f(&mut self.black_rooks);
-        f(&mut self.black_knights);
-        f(&mut self.black_bishops);
-        f(&mut self.black_queens);
-        f(&mut self.black_king);
+    fn piece_at_for(&self, color: Color, square: Square) -> Option<Piece> {
+        [
+            Piece::Pawn,
+            Piece::Rook,
+            Piece::Knight,
+            Piece::Bishop,
+            Piece::Queen,
+            Piece::King,
+        ]
+        .into_iter()
+        .find(|piece| self.pieces(color, *piece).contains(square))
     }
 
-    fn promote(&mut self, color: Color, promotion: PromotionPiece, to: Square) {
-        let (pawns, promoted) = match (color, promotion) {
-            (Color::White, PromotionPiece::Queen) => {
-                (&mut self.white_pawns, &mut self.white_queens)
-            }
-            (Color::White, PromotionPiece::Rook) => (&mut self.white_pawns, &mut self.white_rooks),
-            (Color::White, PromotionPiece::Bishop) => {
-                (&mut self.white_pawns, &mut self.white_bishops)
-            }
-            (Color::White, PromotionPiece::Knight) => {
-                (&mut self.white_pawns, &mut self.white_knights)
-            }
-            (Color::Black, PromotionPiece::Queen) => {
-                (&mut self.black_pawns, &mut self.black_queens)
-            }
-            (Color::Black, PromotionPiece::Rook) => (&mut self.black_pawns, &mut self.black_rooks),
-            (Color::Black, PromotionPiece::Bishop) => {
-                (&mut self.black_pawns, &mut self.black_bishops)
-            }
-            (Color::Black, PromotionPiece::Knight) => {
-                (&mut self.black_pawns, &mut self.black_knights)
-            }
-        };
+    fn pieces(&self, color: Color, piece: Piece) -> Bitboard {
+        match (color, piece) {
+            (Color::White, Piece::Pawn) => self.white_pawns,
+            (Color::White, Piece::Rook) => self.white_rooks,
+            (Color::White, Piece::Knight) => self.white_knights,
+            (Color::White, Piece::Bishop) => self.white_bishops,
+            (Color::White, Piece::Queen) => self.white_queens,
+            (Color::White, Piece::King) => self.white_king,
+            (Color::Black, Piece::Pawn) => self.black_pawns,
+            (Color::Black, Piece::Rook) => self.black_rooks,
+            (Color::Black, Piece::Knight) => self.black_knights,
+            (Color::Black, Piece::Bishop) => self.black_bishops,
+            (Color::Black, Piece::Queen) => self.black_queens,
+            (Color::Black, Piece::King) => self.black_king,
+        }
+    }
 
-        let to = Bitboard::from(to);
-        *pawns &= !to;
-        *promoted |= to;
+    fn pieces_mut(&mut self, color: Color, piece: Piece) -> &mut Bitboard {
+        match (color, piece) {
+            (Color::White, Piece::Pawn) => &mut self.white_pawns,
+            (Color::White, Piece::Rook) => &mut self.white_rooks,
+            (Color::White, Piece::Knight) => &mut self.white_knights,
+            (Color::White, Piece::Bishop) => &mut self.white_bishops,
+            (Color::White, Piece::Queen) => &mut self.white_queens,
+            (Color::White, Piece::King) => &mut self.white_king,
+            (Color::Black, Piece::Pawn) => &mut self.black_pawns,
+            (Color::Black, Piece::Rook) => &mut self.black_rooks,
+            (Color::Black, Piece::Knight) => &mut self.black_knights,
+            (Color::Black, Piece::Bishop) => &mut self.black_bishops,
+            (Color::Black, Piece::Queen) => &mut self.black_queens,
+            (Color::Black, Piece::King) => &mut self.black_king,
+        }
     }
 
     fn add_piece(&mut self, piece: char, square: Square) -> Result<()> {
@@ -407,6 +475,17 @@ impl fmt::Debug for Board {
             writeln!(f)?;
         }
         writeln!(f, "\n   A B C D E F G H")
+    }
+}
+
+impl From<PromotionPiece> for Piece {
+    fn from(promotion: PromotionPiece) -> Self {
+        match promotion {
+            PromotionPiece::Queen => Self::Queen,
+            PromotionPiece::Rook => Self::Rook,
+            PromotionPiece::Bishop => Self::Bishop,
+            PromotionPiece::Knight => Self::Knight,
+        }
     }
 }
 
