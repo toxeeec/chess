@@ -1,4 +1,7 @@
-use std::{marker::ConstParamTy, ops::Not};
+use std::{
+    marker::ConstParamTy,
+    ops::{Index, IndexMut, Not},
+};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -8,8 +11,8 @@ use crate::{board::Board, castling::CastlingRights, square::Square};
 #[derive(Clone, Copy, ConstParamTy, Debug, Deserialize, Eq, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub(super) enum Color {
-    White,
-    Black,
+    White = 0,
+    Black = 1,
 }
 
 pub(super) const OPPONENT<const COLOR: Color>: Color = !COLOR;
@@ -25,6 +28,8 @@ pub(super) struct State {
 }
 
 impl Color {
+    pub(super) const ALL: [Self; 2] = [Self::White, Self::Black];
+
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::White => "white",
@@ -150,6 +155,20 @@ impl State {
             self.castling_rights.fen(),
             self.en_passant.fen()
         )
+    }
+}
+
+const impl<T> Index<Color> for [T; 2] {
+    type Output = T;
+
+    fn index(&self, color: Color) -> &Self::Output {
+        &self[color as usize]
+    }
+}
+
+const impl<T> IndexMut<Color> for [T; 2] {
+    fn index_mut(&mut self, color: Color) -> &mut Self::Output {
+        &mut self[color as usize]
     }
 }
 

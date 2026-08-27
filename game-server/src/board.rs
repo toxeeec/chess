@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Index, IndexMut},
+};
 
 use anyhow::{Result, bail};
 
@@ -18,28 +21,49 @@ const CASTLING_ROOK_MOVES: [[(Square, Square); 2]; 2] = [
 
 #[derive(Clone, Copy)]
 pub(super) struct Board {
-    white_pawns: Bitboard,
-    white_rooks: Bitboard,
-    white_knights: Bitboard,
-    white_bishops: Bitboard,
-    white_queens: Bitboard,
-    white_king: Bitboard,
-    black_pawns: Bitboard,
-    black_rooks: Bitboard,
-    black_knights: Bitboard,
-    black_bishops: Bitboard,
-    black_queens: Bitboard,
-    black_king: Bitboard,
+    pieces: [[Bitboard; 6]; 2],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Piece {
-    Pawn,
-    Rook,
-    Knight,
-    Bishop,
-    Queen,
-    King,
+    Pawn = 0,
+    Rook = 1,
+    Knight = 2,
+    Bishop = 3,
+    Queen = 4,
+    King = 5,
+}
+
+impl Piece {
+    const ALL: [Self; 6] = [
+        Self::Pawn,
+        Self::Rook,
+        Self::Knight,
+        Self::Bishop,
+        Self::Queen,
+        Self::King,
+    ];
+    const FEN: [[char; 6]; 2] = [
+        ['P', 'R', 'N', 'B', 'Q', 'K'],
+        ['p', 'r', 'n', 'b', 'q', 'k'],
+    ];
+
+    fn from_fen(value: char) -> Option<(Color, Self)> {
+        let index = Self::FEN
+            .iter()
+            .flatten()
+            .position(|piece| *piece == value)?;
+        let piece_count = Self::ALL.len();
+
+        Some((
+            Color::ALL[index / piece_count],
+            Self::ALL[index % piece_count],
+        ))
+    }
+
+    fn fen(self, color: Color) -> char {
+        Self::FEN[color][self]
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -51,33 +75,25 @@ pub(super) struct BoardUndo {
 
 impl Default for Board {
     fn default() -> Self {
-        let white_pawns = Bitboard::from(squares![a2, b2, c2, d2, e2, f2, g2, h2]);
-        let white_rooks = Bitboard::from(squares![a1, h1]);
-        let white_knights = Bitboard::from(squares![b1, g1]);
-        let white_bishops = Bitboard::from(squares![c1, f1]);
-        let white_queens = Bitboard::from(square!(d1));
-        let white_king = Bitboard::from(square!(e1));
-
-        let black_pawns = Bitboard::from(squares![a7, b7, c7, d7, e7, f7, g7, h7]);
-        let black_rooks = Bitboard::from(squares![a8, h8]);
-        let black_knights = Bitboard::from(squares![b8, g8]);
-        let black_bishops = Bitboard::from(squares![c8, f8]);
-        let black_queens = Bitboard::from(square!(d8));
-        let black_king = Bitboard::from(square!(e8));
-
         Self {
-            white_pawns,
-            white_rooks,
-            white_knights,
-            white_bishops,
-            white_queens,
-            white_king,
-            black_pawns,
-            black_rooks,
-            black_knights,
-            black_bishops,
-            black_queens,
-            black_king,
+            pieces: [
+                [
+                    Bitboard::from(squares![a2, b2, c2, d2, e2, f2, g2, h2]),
+                    Bitboard::from(squares![a1, h1]),
+                    Bitboard::from(squares![b1, g1]),
+                    Bitboard::from(squares![c1, f1]),
+                    Bitboard::from(square!(d1)),
+                    Bitboard::from(square!(e1)),
+                ],
+                [
+                    Bitboard::from(squares![a7, b7, c7, d7, e7, f7, g7, h7]),
+                    Bitboard::from(squares![a8, h8]),
+                    Bitboard::from(squares![b8, g8]),
+                    Bitboard::from(squares![c8, f8]),
+                    Bitboard::from(square!(d8)),
+                    Bitboard::from(square!(e8)),
+                ],
+            ],
         }
     }
 }
@@ -97,18 +113,7 @@ impl Board {
 
     fn parse_fen_placement(placement: &str) -> Result<Self> {
         let mut board = Self {
-            white_pawns: Bitboard::EMPTY,
-            white_rooks: Bitboard::EMPTY,
-            white_knights: Bitboard::EMPTY,
-            white_bishops: Bitboard::EMPTY,
-            white_queens: Bitboard::EMPTY,
-            white_king: Bitboard::EMPTY,
-            black_pawns: Bitboard::EMPTY,
-            black_rooks: Bitboard::EMPTY,
-            black_knights: Bitboard::EMPTY,
-            black_bishops: Bitboard::EMPTY,
-            black_queens: Bitboard::EMPTY,
-            black_king: Bitboard::EMPTY,
+            pieces: [[Bitboard::EMPTY; 6]; 2],
         };
 
         let ranks = placement.split('/').collect::<Vec<_>>();
@@ -180,45 +185,27 @@ impl Board {
     }
 
     pub(super) fn pawns<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_pawns,
-            Color::Black => self.black_pawns,
-        }
+        self.pieces[COLOR][Piece::Pawn]
     }
 
     pub(super) fn knights<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_knights,
-            Color::Black => self.black_knights,
-        }
+        self.pieces[COLOR][Piece::Knight]
     }
 
     pub(super) fn rooks<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_rooks,
-            Color::Black => self.black_rooks,
-        }
+        self.pieces[COLOR][Piece::Rook]
     }
 
     pub(super) fn bishops<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_bishops,
-            Color::Black => self.black_bishops,
-        }
+        self.pieces[COLOR][Piece::Bishop]
     }
 
     pub(super) fn queens<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_queens,
-            Color::Black => self.black_queens,
-        }
+        self.pieces[COLOR][Piece::Queen]
     }
 
     pub(super) fn king<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => self.white_king,
-            Color::Black => self.black_king,
-        }
+        self.pieces[COLOR][Piece::King]
     }
 
     pub(super) fn king_square<const COLOR: Color>(&self) -> Square {
@@ -229,24 +216,12 @@ impl Board {
     }
 
     pub(super) fn occupancy<const COLOR: Color>(&self) -> Bitboard {
-        match COLOR {
-            Color::White => {
-                self.white_pawns
-                    | self.white_rooks
-                    | self.white_knights
-                    | self.white_bishops
-                    | self.white_queens
-                    | self.white_king
-            }
-            Color::Black => {
-                self.black_pawns
-                    | self.black_rooks
-                    | self.black_knights
-                    | self.black_bishops
-                    | self.black_queens
-                    | self.black_king
-            }
-        }
+        self.pieces[COLOR][Piece::Pawn]
+            | self.pieces[COLOR][Piece::Rook]
+            | self.pieces[COLOR][Piece::Knight]
+            | self.pieces[COLOR][Piece::Bishop]
+            | self.pieces[COLOR][Piece::Queen]
+            | self.pieces[COLOR][Piece::King]
     }
 
     pub(super) fn make_move(
@@ -269,22 +244,21 @@ impl Board {
         };
         let captured = self.piece_at_for(color.opponent(), captured_square);
         if let Some(captured) = captured {
-            *self.pieces_mut(color.opponent(), captured) &= !Bitboard::from(captured_square);
+            self.pieces[color.opponent()][captured] &= !Bitboard::from(captured_square);
         }
 
-        self.pieces_mut(color, moved).apply_move(mve.from, mve.to);
+        self.pieces[color][moved].apply_move(mve.from, mve.to);
 
         if moved == Piece::King && mve.from.file().abs_diff(mve.to.file()) == 2 {
             let king_side = (mve.to.file() > mve.from.file()) as usize;
-            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color as usize][king_side];
-            self.pieces_mut(color, Piece::Rook)
-                .apply_move(rook_from, rook_to);
+            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color][king_side];
+            self.pieces[color][Piece::Rook].apply_move(rook_from, rook_to);
         }
 
         if let Some(promotion) = mve.promotion {
             debug_assert_eq!(moved, Piece::Pawn);
-            *self.pieces_mut(color, Piece::Pawn) &= !Bitboard::from(mve.to);
-            *self.pieces_mut(color, promotion.into()) |= mve.to;
+            self.pieces[color][Piece::Pawn] &= !Bitboard::from(mve.to);
+            self.pieces[color][Piece::from(promotion)] |= mve.to;
         }
 
         BoardUndo {
@@ -304,17 +278,15 @@ impl Board {
     ) {
         if undo.moved == Piece::King && mve.from.file().abs_diff(mve.to.file()) == 2 {
             let king_side = (mve.to.file() > mve.from.file()) as usize;
-            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color as usize][king_side];
-            self.pieces_mut(color, Piece::Rook)
-                .apply_move(rook_to, rook_from);
+            let (rook_from, rook_to) = CASTLING_ROOK_MOVES[color][king_side];
+            self.pieces[color][Piece::Rook].apply_move(rook_to, rook_from);
         }
 
         if let Some(promotion) = mve.promotion {
-            *self.pieces_mut(color, promotion.into()) &= !Bitboard::from(mve.to);
-            *self.pieces_mut(color, Piece::Pawn) |= mve.from;
+            self.pieces[color][Piece::from(promotion)] &= !Bitboard::from(mve.to);
+            self.pieces[color][Piece::Pawn] |= mve.from;
         } else {
-            self.pieces_mut(color, undo.moved)
-                .apply_move(mve.to, mve.from);
+            self.pieces[color][undo.moved].apply_move(mve.to, mve.from);
         }
 
         if let Some(captured) = undo.captured {
@@ -326,7 +298,7 @@ impl Board {
             } else {
                 mve.to
             };
-            *self.pieces_mut(color.opponent(), captured) |= captured_square;
+            self.pieces[color.opponent()][captured] |= captured_square;
         }
     }
 
@@ -368,92 +340,29 @@ impl Board {
     }
 
     fn piece_at_for(&self, color: Color, square: Square) -> Option<Piece> {
-        [
-            Piece::Pawn,
-            Piece::Rook,
-            Piece::Knight,
-            Piece::Bishop,
-            Piece::Queen,
-            Piece::King,
-        ]
-        .into_iter()
-        .find(|piece| self.pieces(color, *piece).contains(square))
-    }
-
-    fn pieces(&self, color: Color, piece: Piece) -> Bitboard {
-        match (color, piece) {
-            (Color::White, Piece::Pawn) => self.white_pawns,
-            (Color::White, Piece::Rook) => self.white_rooks,
-            (Color::White, Piece::Knight) => self.white_knights,
-            (Color::White, Piece::Bishop) => self.white_bishops,
-            (Color::White, Piece::Queen) => self.white_queens,
-            (Color::White, Piece::King) => self.white_king,
-            (Color::Black, Piece::Pawn) => self.black_pawns,
-            (Color::Black, Piece::Rook) => self.black_rooks,
-            (Color::Black, Piece::Knight) => self.black_knights,
-            (Color::Black, Piece::Bishop) => self.black_bishops,
-            (Color::Black, Piece::Queen) => self.black_queens,
-            (Color::Black, Piece::King) => self.black_king,
-        }
-    }
-
-    fn pieces_mut(&mut self, color: Color, piece: Piece) -> &mut Bitboard {
-        match (color, piece) {
-            (Color::White, Piece::Pawn) => &mut self.white_pawns,
-            (Color::White, Piece::Rook) => &mut self.white_rooks,
-            (Color::White, Piece::Knight) => &mut self.white_knights,
-            (Color::White, Piece::Bishop) => &mut self.white_bishops,
-            (Color::White, Piece::Queen) => &mut self.white_queens,
-            (Color::White, Piece::King) => &mut self.white_king,
-            (Color::Black, Piece::Pawn) => &mut self.black_pawns,
-            (Color::Black, Piece::Rook) => &mut self.black_rooks,
-            (Color::Black, Piece::Knight) => &mut self.black_knights,
-            (Color::Black, Piece::Bishop) => &mut self.black_bishops,
-            (Color::Black, Piece::Queen) => &mut self.black_queens,
-            (Color::Black, Piece::King) => &mut self.black_king,
-        }
+        Piece::ALL
+            .into_iter()
+            .find(|piece| self.pieces[color][*piece].contains(square))
     }
 
     fn add_piece(&mut self, piece: char, square: Square) -> Result<()> {
-        let bitboard = match piece {
-            'P' => &mut self.white_pawns,
-            'R' => &mut self.white_rooks,
-            'N' => &mut self.white_knights,
-            'B' => &mut self.white_bishops,
-            'Q' => &mut self.white_queens,
-            'K' => &mut self.white_king,
-            'p' => &mut self.black_pawns,
-            'r' => &mut self.black_rooks,
-            'n' => &mut self.black_knights,
-            'b' => &mut self.black_bishops,
-            'q' => &mut self.black_queens,
-            'k' => &mut self.black_king,
-            _ => bail!("invalid FEN piece: {piece}"),
-        };
+        let (color, piece) =
+            Piece::from_fen(piece).ok_or_else(|| anyhow::anyhow!("invalid FEN piece: {piece}"))?;
 
-        *bitboard |= square;
+        self.pieces[color][piece] |= square;
         Ok(())
     }
 
     fn piece_at(&self, sq: Square) -> Option<char> {
-        let pieces = [
-            (self.black_pawns, 'p'),
-            (self.black_rooks, 'r'),
-            (self.black_knights, 'n'),
-            (self.black_bishops, 'b'),
-            (self.black_queens, 'q'),
-            (self.black_king, 'k'),
-            (self.white_pawns, 'P'),
-            (self.white_rooks, 'R'),
-            (self.white_knights, 'N'),
-            (self.white_bishops, 'B'),
-            (self.white_queens, 'Q'),
-            (self.white_king, 'K'),
-        ];
+        for color in [Color::Black, Color::White] {
+            for piece in Piece::ALL {
+                if self.pieces[color][piece].contains(sq) {
+                    return Some(piece.fen(color));
+                }
+            }
+        }
 
-        pieces
-            .iter()
-            .find_map(|(bb, piece)| bb.contains(sq).then_some(*piece))
+        None
     }
 }
 
@@ -486,6 +395,20 @@ impl From<PromotionPiece> for Piece {
             PromotionPiece::Bishop => Self::Bishop,
             PromotionPiece::Knight => Self::Knight,
         }
+    }
+}
+
+const impl<T> Index<Piece> for [T; 6] {
+    type Output = T;
+
+    fn index(&self, piece: Piece) -> &Self::Output {
+        &self[piece as usize]
+    }
+}
+
+const impl<T> IndexMut<Piece> for [T; 6] {
+    fn index_mut(&mut self, piece: Piece) -> &mut Self::Output {
+        &mut self[piece as usize]
     }
 }
 
