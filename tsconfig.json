@@ -6,12 +6,7 @@
 		"jsx": "react-jsx",
 		"module": "ESNext",
 		"lib": ["ES2025", "DOM", "DOM.Iterable"],
-		"types": [
-			"@cloudflare/vitest-pool-workers/types",
-			"vite/client",
-			"vitest",
-			"vitest/importMeta"
-		],
+		"types": ["@cloudflare/vitest-plugin/types", "vite/client", "vitest", "vitest/importMeta"],
 		"paths": {
 			"#/*": ["./src/*"]
 		},

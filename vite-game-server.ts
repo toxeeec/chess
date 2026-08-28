@@ -27,10 +27,10 @@ export function gameServer(): Plugin {
 	const src = resolve(root, "src")
 	const cargoToml = resolve(root, "Cargo.toml")
 	const cargoLock = resolve(root, "Cargo.lock")
-	const patchScript = resolve(import.meta.dirname, "scripts/patchGameServerWasmImport.mjs")
-	const outputJs = resolve(root, "build/game_server.js")
-	const outputWasm = resolve(root, "build/game_server_bg.wasm")
-	const inputs = [src, cargoToml, cargoLock, patchScript]
+	const buildScript = resolve(import.meta.dirname, "scripts/buildGameServer.ts")
+	const outputJs = resolve(root, "build/dev/game_server.js")
+	const outputWasm = resolve(root, "build/dev/game_server_bg.wasm")
+	const inputs = [src, cargoToml, cargoLock, buildScript]
 	const buildIfStale = () => {
 		if (!existsSync(outputJs) || !existsSync(outputWasm)) {
 			buildGameServer()

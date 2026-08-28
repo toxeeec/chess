@@ -13,6 +13,8 @@
 )]
 
 mod attacks;
+#[cfg(feature = "benchmark")]
+mod benchmark;
 mod bishop;
 mod bitboard;
 mod board;
@@ -23,6 +25,8 @@ mod knight;
 mod magics;
 mod moves;
 mod pawn;
+#[cfg(any(test, feature = "benchmark"))]
+mod perft;
 mod queen;
 mod rook;
 mod server;
@@ -31,5 +35,7 @@ mod state;
 #[cfg(test)]
 mod test_utils;
 
+#[cfg(feature = "benchmark")]
+pub use benchmark::{GameReplay, Perft};
 pub use game::Game;
 pub use server::{GameServer, SnapshotMessage};

@@ -69,7 +69,7 @@ impl Piece {
 #[derive(Clone, Copy)]
 pub(super) struct BoardUndo {
     pub(super) moved: Piece,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "benchmark"))]
     captured: Option<Piece>,
 }
 
@@ -263,12 +263,12 @@ impl Board {
 
         BoardUndo {
             moved,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "benchmark"))]
             captured,
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "benchmark"))]
     pub(super) fn unmake_move(
         &mut self,
         color: Color,

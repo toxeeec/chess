@@ -7,8 +7,10 @@
 		"#/*": "./src/*"
 	},
 	"scripts": {
+		"bench": "node benchmarks/bench.ts",
 		"build": "vite build",
-		"build:game-server": "RUSTFLAGS='-Cpanic=unwind' cargo build --manifest-path game-server/Cargo.toml --target wasm32-unknown-unknown -Zbuild-std=std,panic_unwind && wasm-bindgen game-server/target/wasm32-unknown-unknown/debug/game_server.wasm --target module --typescript --out-dir game-server/build --experimental-reset-state-function && node scripts/patchGameServerWasmImport.mjs",
+		"build:game-server": "node scripts/buildGameServer.ts --mode dev",
+		"build:game-server:benchmark": "node scripts/buildGameServer.ts --mode benchmark",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio",
 		"deploy": "pnpm run build && wrangler deploy",
@@ -38,7 +40,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "^1.52.1",
-		"@cloudflare/vitest-pool-workers": "^0.21.3",
+		"@cloudflare/vitest-plugin": "^1.1.0",
 		"@j178/prek": "^0.4.13",
 		"@rolldown/plugin-babel": "^0.2.3",
 		"@tailwindcss/vite": "^4.3.3",
@@ -53,6 +55,7 @@
 		"@types/react-dom": "^19.2.4",
 		"@vitejs/plugin-react": "^6.0.5",
 		"babel-plugin-react-compiler": "^1.0.0",
+		"chess.js": "^1.4.0",
 		"drizzle-kit": "1.0.0-rc.3",
 		"oxfmt": "^0.63.0",
 		"oxlint": "^1.78.0",

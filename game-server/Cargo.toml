@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+benchmark = []
+
+[profile.benchmark]
+inherits = "release"
 
 [dependencies]
 anyhow = "1.0.102"
@@ -13,3 +19,16 @@ serde_json = "1.0.150"
 wasm-bindgen = "0.2.125"
 wasm-bindgen-futures = "0.4.75"
 worker = "0.8.5"
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "perft"
+harness = false
+required-features = ["benchmark"]
+
+[[bench]]
+name = "games"
+harness = false
+required-features = ["benchmark"]

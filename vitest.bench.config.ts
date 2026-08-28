@@ -1,36 +1,32 @@
-import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 
 import { cloudflareTest } from "@cloudflare/vitest-plugin"
-import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import { defineConfig } from "vitest/config"
 import { unstable_readConfig } from "wrangler"
 
+const gameDatasetPath = process.env.GAME_DATASET_PATH
 const wranglerConfig = unstable_readConfig({ config: "wrangler.jsonc" })
 if (!wranglerConfig.compatibility_date) {
 	throw new Error("Wrangler compatibility_date is required")
 }
 
-const testSchemaSql = execFileSync("pnpm", ["exec", "drizzle-kit", "export"], {
-	encoding: "utf8",
-}).replaceAll("\n", " ")
-
 export default defineConfig({
 	plugins: [
-		tanstackStart(),
 		cloudflareTest({
-			main: "./src/server.ts",
 			miniflare: {
 				compatibilityDate: wranglerConfig.compatibility_date,
 				compatibilityFlags: wranglerConfig.compatibility_flags,
-				d1Databases: { DB: "chess-test" },
-				durableObjects: { GAME_SERVER: { className: "GameServer", useSQLite: true } },
 				modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm?module"] }],
 			},
 		}),
 	],
-	resolve: { tsconfigPaths: true },
 	test: {
-		includeSource: ["src/**/*.{ts,tsx}"],
-		provide: { TEST_SCHEMA_SQL: testSchemaSql },
+		include: ["game-server/benches/**/*.bench.ts"],
+		provide: {
+			GAME_DATASET: gameDatasetPath ? readFileSync(gameDatasetPath, "utf8") : "",
+			GAME_DATASET_ID: process.env.GAME_DATASET_ID,
+			PERFT_CASES: process.env.PERFT_CASES,
+			PERFT_LABEL: process.env.PERFT_LABEL,
+		},
 	},
 })

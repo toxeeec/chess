@@ -14,7 +14,7 @@ use crate::{
     state::{Color, EnPassant, OPPONENT, State},
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "benchmark"))]
 use crate::board::BoardUndo;
 
 pub(super) enum MakeMoveError {
@@ -35,10 +35,10 @@ pub struct Game {
 }
 
 #[derive(Clone, Copy)]
-struct Undo {
-    #[cfg(test)]
+pub(super) struct Undo {
+    #[cfg(any(test, feature = "benchmark"))]
     state: State,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "benchmark"))]
     board: BoardUndo,
 }
 
@@ -97,35 +97,13 @@ impl Game {
             &mut self.moves,
         ))
     }
-
-    #[cfg(test)]
-    fn perft(&self, depth: u32) -> u64 {
-        if depth == 0 {
-            return 1;
-        }
-        if depth == 1 {
-            return self.moves.len() as u64;
-        }
-
-        let mut board = self.board;
-        let mut state = self.state;
-        let mut move_lists = std::iter::repeat_with(MoveList::default)
-            .take(depth as usize - 1)
-            .collect::<Vec<_>>();
-
-        self.moves
-            .iter()
-            .map(|mve| {
-                let undo = apply_move(&mut board, &mut state, mve);
-                let nodes = perft(&mut board, &mut state, depth - 1, move_lists.as_mut_slice());
-                undo_move(&mut board, &mut state, mve, undo);
-                nodes
-            })
-            .sum()
-    }
 }
 
-fn generate_legal_moves(board: &Board, state: State, moves: &mut MoveList) -> Option<GameResult> {
+pub(super) fn generate_legal_moves(
+    board: &Board,
+    state: State,
+    moves: &mut MoveList,
+) -> Option<GameResult> {
     moves.clear();
     match state.turn {
         Color::White => generate_legal_moves_for::<{ Color::White }>(board, state, moves),
@@ -186,7 +164,7 @@ fn generate_legal_moves_for<const COLOR: Color>(
     }
 }
 
-fn apply_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
+pub(super) fn apply_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
     let previous_state = *state;
     let board_undo = board.make_move(previous_state.turn, mve, previous_state.en_passant.target());
 
@@ -203,15 +181,15 @@ fn apply_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
     state.turn = previous_state.turn.opponent();
 
     Undo {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "benchmark"))]
         state: previous_state,
-        #[cfg(test)]
+        #[cfg(any(test, feature = "benchmark"))]
         board: board_undo,
     }
 }
 
-#[cfg(test)]
-fn undo_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
+#[cfg(any(test, feature = "benchmark"))]
+pub(super) fn undo_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
     board.unmake_move(
         undo.state.turn,
         mve,
@@ -219,28 +197,6 @@ fn undo_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
         undo.board,
     );
     *state = undo.state;
-}
-
-#[cfg(test)]
-fn perft(board: &mut Board, state: &mut State, depth: u32, move_lists: &mut [MoveList]) -> u64 {
-    let (moves, child_move_lists) = move_lists
-        .split_first_mut()
-        .expect("perft must allocate one move list per searched ply");
-    generate_legal_moves(board, *state, moves);
-
-    if depth == 1 {
-        return moves.len() as u64;
-    }
-
-    moves
-        .iter()
-        .map(|mve| {
-            let undo = apply_move(board, state, mve);
-            let nodes = perft(board, state, depth - 1, child_move_lists);
-            undo_move(board, state, mve, undo);
-            nodes
-        })
-        .sum()
 }
 
 #[cfg(test)]
@@ -339,7 +295,7 @@ mod tests {
     #[test]
     fn perft_tactical_promotions() {
         assert_perft(
-            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 0 1",
             &[44, 1_486, 62_379, 2_103_487],
         );
     }
@@ -347,7 +303,7 @@ mod tests {
     #[test]
     fn perft_pins_and_discovered_attacks() {
         assert_perft(
-            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 1",
             &[46, 2_079, 89_890, 3_894_594],
         );
     }

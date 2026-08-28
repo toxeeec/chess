@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers"
 
-import { GameServer as WasmGameServer } from "../game-server/build/game_server.js"
+import { GameServer as WasmGameServer } from "../game-server/build/dev/game_server.js"
 
 export class GameServer extends DurableObject {
 	readonly #wasmGameServer: WasmGameServer

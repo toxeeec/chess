@@ -1,4 +1,5 @@
 .agents
+.cache
 .DS_Store
 .env
 .wrangler

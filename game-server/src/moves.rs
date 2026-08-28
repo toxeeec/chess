@@ -103,12 +103,12 @@ impl MoveList {
         self.0.push(mve);
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "benchmark"))]
     pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "benchmark"))]
     pub(crate) fn iter(&self) -> impl Iterator<Item = Move> + '_ {
         self.0.iter().copied()
     }
