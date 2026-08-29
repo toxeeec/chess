@@ -3,7 +3,7 @@ use crate::{
     bitboard::Bitboard,
     board::Board,
     magics::{bishop_attacks, rook_attacks},
-    moves::{Move, MoveList},
+    moves::MoveList,
     state::Color,
 };
 
@@ -11,6 +11,7 @@ pub(super) fn add_queen_moves<const COLOR: Color>(
     board: &Board,
     occupied: Bitboard,
     blockers: Bitboard,
+    enemies: Bitboard,
     evasion_mask: Bitboard,
     pin_rays: PinRays,
     list: &mut MoveList,
@@ -21,15 +22,15 @@ pub(super) fn add_queen_moves<const COLOR: Color>(
 
     for from in queens & !pinned {
         let moves = (rook_attacks(from, occupied) | bishop_attacks(from, occupied)) & targets;
-        list.extend(moves.map(|to| Move::new(from, to, None)));
+        board.add_normal_moves(list, from, moves, enemies);
     }
     for from in queens & pin_rays.diagonal {
         let moves = bishop_attacks(from, occupied) & targets & pin_rays.diagonal;
-        list.extend(moves.map(|to| Move::new(from, to, None)));
+        board.add_normal_moves(list, from, moves, enemies);
     }
     for from in queens & pin_rays.orthogonal {
         let moves = rook_attacks(from, occupied) & targets & pin_rays.orthogonal;
-        list.extend(moves.map(|to| Move::new(from, to, None)));
+        board.add_normal_moves(list, from, moves, enemies);
     }
 }
 
@@ -49,11 +50,15 @@ mod tests {
 
     fn queen_moves(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
+        let blockers = board.occupancy::<{ Color::White }>();
+        let enemies = board.occupancy::<{ Color::Black }>();
+        let occupied = blockers | enemies;
 
         add_queen_moves::<{ Color::White }>(
             &board,
-            board.occupied(),
-            board.occupancy::<{ Color::White }>(),
+            occupied,
+            blockers,
+            enemies,
             Bitboard::FULL,
             pin_rays,
             &mut moves,

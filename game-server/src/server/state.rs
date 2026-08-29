@@ -1,6 +1,6 @@
 use crate::{
     game::{Game, GameResult, MakeMoveError as GameMakeMoveError},
-    moves::{Move, MoveList},
+    moves::{MoveList, UciMove},
     state::Color,
 };
 use serde::{Deserialize, Serialize};
@@ -318,7 +318,7 @@ impl GameState {
     pub(super) fn make_move(
         &mut self,
         color: Color,
-        mve: Move,
+        mve: UciMove,
         now: i64,
     ) -> Result<(), MakeMoveError> {
         let Some(turn_started_at) = self.turn_started_at() else {

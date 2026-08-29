@@ -2,7 +2,7 @@ use crate::{
     bitboard::{Bitboard, Direction},
     board::Board,
     castling::{CastlingRights, add_castling_moves},
-    moves::{Move, MoveList},
+    moves::MoveList,
     square::Square,
     state::Color,
 };
@@ -10,15 +10,16 @@ use crate::{
 pub(super) fn add_king_moves<const COLOR: Color>(
     board: &Board,
     occupied: Bitboard,
-    blockers: Bitboard,
+    enemies: Bitboard,
     attackers: Bitboard,
     forbidden: Bitboard,
     castling_rights: CastlingRights,
     list: &mut MoveList,
 ) {
     let from = board.king_square::<COLOR>();
+    let blockers = occupied & !enemies;
     let moves = KING_ATTACKS[from] & !(blockers | forbidden);
-    list.extend(moves.map(|to| Move::new(from, to, None)));
+    board.add_normal_moves(list, from, moves, enemies);
     add_castling_moves::<COLOR>(board, occupied, attackers, forbidden, castling_rights, list);
 }
 
@@ -57,15 +58,17 @@ mod tests {
 
     fn king_moves(board: Board) -> MoveList {
         let mut moves = MoveList::default();
-        let occupied = board.occupied();
-        let forbidden = king_threats::<{ Color::Black }>(&board, occupied).forbidden;
+        let blockers = board.occupancy::<{ Color::White }>();
+        let enemies = board.occupancy::<{ Color::Black }>();
+        let occupied = blockers | enemies;
+        let threats = king_threats::<{ Color::Black }>(&board, occupied, blockers);
 
         add_king_moves::<{ Color::White }>(
             &board,
             occupied,
-            board.occupancy::<{ Color::White }>(),
-            king_threats::<{ Color::Black }>(&board, occupied).attackers,
-            forbidden,
+            enemies,
+            threats.attackers,
+            threats.forbidden,
             CastlingRights::NONE,
             &mut moves,
         );

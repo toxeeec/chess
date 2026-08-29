@@ -1,4 +1,44 @@
-use crate::{board::Board, moves::MoveList};
+use crate::{
+    board::Board,
+    moves::{MoveList, UciMove},
+    square::Square,
+};
+
+pub(super) fn uci_moves_from_ascii(ascii: &str) -> Vec<UciMove> {
+    let squares = ascii
+        .chars()
+        .filter(|square| !square.is_whitespace())
+        .collect::<Vec<_>>();
+
+    assert_eq!(squares.len(), 64, "moves! must contain 64 squares");
+
+    let mut from = None;
+    let mut targets = Vec::new();
+
+    for (index, square) in squares.into_iter().enumerate() {
+        let rank = 7 - index as u32 / 8;
+        let file = index as u32 % 8;
+        let square_index = Square::new(rank * 8 + file);
+
+        match square {
+            '.' => {}
+            'o' => {
+                assert!(
+                    from.replace(square_index).is_none(),
+                    "moves! must contain one o source"
+                );
+            }
+            'x' => targets.push(square_index),
+            _ => panic!("invalid moves! square `{square}`; expected . o or x"),
+        }
+    }
+
+    let from = from.expect("moves! must contain one o source");
+    targets
+        .into_iter()
+        .map(|to| UciMove::new(from, to, None))
+        .collect()
+}
 
 macro_rules! board {
     (@square .) =>  { "." };
@@ -80,7 +120,7 @@ macro_rules! moves {
         $a2:tt $b2:tt $c2:tt $d2:tt $e2:tt $f2:tt $g2:tt $h2:tt
         $a1:tt $b1:tt $c1:tt $d1:tt $e1:tt $f1:tt $g1:tt $h1:tt
     ) => {
-        crate::moves::MoveList::from_ascii(concat!(
+        crate::test_utils::uci_moves_from_ascii(concat!(
             moves!(@square $a8), moves!(@square $b8), moves!(@square $c8), moves!(@square $d8),
             moves!(@square $e8), moves!(@square $f8), moves!(@square $g8), moves!(@square $h8),
             moves!(@square $a7), moves!(@square $b7), moves!(@square $c7), moves!(@square $d7),
@@ -109,16 +149,12 @@ pub(super) use moves;
 pub(super) struct MoveCase {
     pub(super) name: &'static str,
     pub(super) board: Board,
-    pub(super) moves: MoveList,
+    pub(super) moves: Vec<UciMove>,
 }
 
 pub(super) fn assert_move_case(case: MoveCase, generate_moves: impl FnOnce(Board) -> MoveList) {
-    let MoveCase {
-        name,
-        board,
-        moves: expected,
-    } = case;
-    assert_generated_moves(name, &expected, generate_moves(board));
+    let MoveCase { name, board, moves } = case;
+    assert_generated_moves(name, &moves, generate_moves(board));
 }
 
 pub(super) fn assert_move_cases<const N: usize>(
@@ -130,7 +166,7 @@ pub(super) fn assert_move_cases<const N: usize>(
     }
 }
 
-fn assert_generated_moves(name: &str, expected: &MoveList, actual: MoveList) {
+fn assert_generated_moves(name: &str, expected: &[UciMove], actual: MoveList) {
     assert_eq!(
         actual.len(),
         expected.len(),
@@ -138,10 +174,10 @@ fn assert_generated_moves(name: &str, expected: &MoveList, actual: MoveList) {
         name
     );
 
-    for expected in expected.iter() {
+    for &mve in expected {
         assert!(
-            actual.contains(expected),
-            "{}: missing move {expected}; got {actual}",
+            actual.resolve(mve).is_some(),
+            "{}: missing move {mve}; got {actual}",
             name
         );
     }

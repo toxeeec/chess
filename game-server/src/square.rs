@@ -71,6 +71,12 @@ impl Square {
     }
 }
 
+impl From<Square> for u16 {
+    fn from(square: Square) -> Self {
+        square.0 as Self
+    }
+}
+
 impl From<Square> for u32 {
     fn from(square: Square) -> Self {
         square.0 as Self

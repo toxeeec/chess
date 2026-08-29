@@ -8,87 +8,136 @@ use anyhow::{Result, bail};
 use crate::square::Square;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub(super) enum PromotionPiece {
-    Queen,
-    Rook,
-    Bishop,
-    Knight,
+    Knight = 0,
+    Bishop = 1,
+    Rook = 2,
+    Queen = 3,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct Move {
-    pub(super) from: Square,
-    pub(super) to: Square,
-    pub(super) promotion: Option<PromotionPiece>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub(super) enum MoveKind {
+    Quiet = 0,
+    DoublePush = 1,
+    CastleKing = 2,
+    CastleQueen = 3,
+    Capture = 4,
+    EnPassant = 5,
+    PromoteKnight = 8,
+    PromoteBishop = 9,
+    PromoteRook = 10,
+    PromoteQueen = 11,
+    CapturePromoteKnight = 12,
+    CapturePromoteBishop = 13,
+    CapturePromoteRook = 14,
+    CapturePromoteQueen = 15,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub(super) struct Move(u16);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub(super) struct UciMove(u16);
 
 pub(crate) struct MoveList(Vec<Move>);
 
 const MAX_LEGAL_MOVES: usize = 218;
 
+impl MoveKind {
+    pub(super) const QUIET_PROMOTIONS: [Self; 4] = [
+        Self::PromoteQueen,
+        Self::PromoteRook,
+        Self::PromoteBishop,
+        Self::PromoteKnight,
+    ];
+    pub(super) const CAPTURE_PROMOTIONS: [Self; 4] = [
+        Self::CapturePromoteQueen,
+        Self::CapturePromoteRook,
+        Self::CapturePromoteBishop,
+        Self::CapturePromoteKnight,
+    ];
+
+    pub(super) fn promotion(self) -> Option<PromotionPiece> {
+        let code = self as u8;
+        if code & 0b1000 == 0 {
+            None
+        } else {
+            // SAFETY: Masking to the low two bits produces a code in `0..=3`.
+            Some(unsafe { PromotionPiece::from_code_unchecked(code & 0b11) })
+        }
+    }
+
+    pub(super) fn is_capture(self) -> bool {
+        self as u8 & 0b100 != 0
+    }
+
+    /// # Safety
+    ///
+    /// `code` must be a valid `MoveKind` discriminant in `0..=5` or `8..=15`.
+    unsafe fn from_code_unchecked(code: u8) -> Self {
+        debug_assert!(code < 16 && code != 6 && code != 7);
+
+        // SAFETY: `MoveKind` has `repr(u8)` discriminants for 0 through 5 and 8 through 15.
+        unsafe { std::mem::transmute(code) }
+    }
+}
+
 impl PromotionPiece {
-    pub(super) const ALL: [Self; 4] = [Self::Queen, Self::Rook, Self::Bishop, Self::Knight];
+    /// # Safety
+    ///
+    /// `code` must be a valid `PromotionPiece` discriminant in `0..=3`.
+    unsafe fn from_code_unchecked(code: u8) -> Self {
+        debug_assert!(code < 4);
+
+        // SAFETY: PromotionPiece has contiguous repr(u8) discriminants from 0 through 3.
+        unsafe { std::mem::transmute(code) }
+    }
 }
 
 impl Move {
-    pub(super) fn new(from: Square, to: Square, promotion: Option<PromotionPiece>) -> Self {
-        Self {
-            from,
-            to,
-            promotion,
-        }
+    const SQUARE_MASK: u16 = 0b111111;
+    const KIND_MASK: u16 = 0b1111;
+    const TO_SHIFT: u32 = 4;
+    const FROM_SHIFT: u32 = 10;
+
+    pub(super) fn new(from: Square, to: Square, kind: MoveKind) -> Self {
+        Self(
+            (u16::from(from) << Self::FROM_SHIFT) | (u16::from(to) << Self::TO_SHIFT) | kind as u16,
+        )
+    }
+
+    pub(super) fn from(self) -> Square {
+        Square::new(u32::from(self.0 >> Self::FROM_SHIFT))
+    }
+
+    pub(super) fn to(self) -> Square {
+        Square::new(u32::from((self.0 >> Self::TO_SHIFT) & Self::SQUARE_MASK))
+    }
+
+    pub(super) fn kind(self) -> MoveKind {
+        let code = (self.0 & Self::KIND_MASK) as u8;
+
+        // SAFETY: `Move` values are only built from valid `MoveKind` discriminants.
+        unsafe { MoveKind::from_code_unchecked(code) }
     }
 }
 
 impl MoveList {
     pub(super) const EMPTY: &'static Self = &Self(Vec::new());
 
-    #[cfg(test)]
-    pub(super) fn from_ascii(ascii: &str) -> Self {
-        let squares = ascii
-            .chars()
-            .filter(|square| !square.is_whitespace())
-            .collect::<Vec<_>>();
-
-        assert_eq!(squares.len(), 64, "moves! must contain 64 squares");
-
-        let mut from = None;
-        let mut targets = Vec::new();
-
-        for (index, square) in squares.into_iter().enumerate() {
-            let rank = 7 - index as u32 / 8;
-            let file = index as u32 % 8;
-            let square_index = Square::new(rank * 8 + file);
-
-            match square {
-                '.' => {}
-                'o' => {
-                    assert!(
-                        from.replace(square_index).is_none(),
-                        "moves! must contain one o source"
-                    );
-                }
-                'x' => targets.push(square_index),
-                _ => panic!("invalid moves! square `{square}`; expected . o or x"),
-            }
-        }
-
-        let from = from.expect("moves! must contain one o source");
-
-        Self(
-            targets
-                .into_iter()
-                .map(|to| Move::new(from, to, None))
-                .collect(),
-        )
-    }
-
     pub(crate) fn clear(&mut self) {
         self.0.clear();
     }
 
-    pub(crate) fn contains(&self, mve: Move) -> bool {
-        self.0.contains(&mve)
+    pub(crate) fn resolve(&self, input: UciMove) -> Option<Move> {
+        self.0
+            .iter()
+            .copied()
+            .find(|mve| Into::<UciMove>::into(*mve) == input)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -114,6 +163,31 @@ impl MoveList {
     }
 }
 
+impl UciMove {
+    pub(super) fn new(from: Square, to: Square, promotion: Option<PromotionPiece>) -> Self {
+        let promotion = promotion.map_or(0, |piece| 0b1000 | u16::from(piece as u8));
+        Self((u16::from(from) << Move::FROM_SHIFT) | (u16::from(to) << Move::TO_SHIFT) | promotion)
+    }
+
+    fn from(self) -> Square {
+        Square::new(u32::from(self.0 >> Move::FROM_SHIFT))
+    }
+
+    fn to(self) -> Square {
+        Square::new(u32::from((self.0 >> Move::TO_SHIFT) & Move::SQUARE_MASK))
+    }
+
+    fn promotion(self) -> Option<PromotionPiece> {
+        let code = (self.0 & Move::KIND_MASK) as u8;
+        if code == 0 {
+            None
+        } else {
+            // SAFETY: All two-bit values are valid `PromotionPiece` discriminants.
+            Some(unsafe { PromotionPiece::from_code_unchecked(code & 0b11) })
+        }
+    }
+}
+
 impl TryFrom<&u8> for PromotionPiece {
     type Error = anyhow::Error;
 
@@ -136,25 +210,33 @@ impl fmt::Display for PromotionPiece {
             Self::Bishop => 'b',
             Self::Knight => 'n',
         };
-
         f.write_char(piece)
     }
 }
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_char((b'a' + self.from.file()) as char)?;
-        f.write_char((b'1' + self.from.rank()) as char)?;
-        f.write_char((b'a' + self.to.file()) as char)?;
-        f.write_char((b'1' + self.to.rank()) as char)?;
-        if let Some(promotion) = self.promotion {
+        write!(f, "{}", Into::<UciMove>::into(*self))
+    }
+}
+
+impl fmt::Display for UciMove {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let from = self.from();
+        let to = self.to();
+
+        f.write_char((b'a' + from.file()) as char)?;
+        f.write_char((b'1' + from.rank()) as char)?;
+        f.write_char((b'a' + to.file()) as char)?;
+        f.write_char((b'1' + to.rank()) as char)?;
+        if let Some(promotion) = self.promotion() {
             write!(f, "{promotion}")?;
         }
         Ok(())
     }
 }
 
-impl FromStr for Move {
+impl FromStr for UciMove {
     type Err = anyhow::Error;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
@@ -166,8 +248,15 @@ impl FromStr for Move {
         let from = parse_square(value[0], value[1])?;
         let to = parse_square(value[2], value[3])?;
         let promotion = value.get(4).map(PromotionPiece::try_from).transpose()?;
-
         Ok(Self::new(from, to, promotion))
+    }
+}
+
+impl From<Move> for UciMove {
+    fn from(mve: Move) -> Self {
+        let kind = mve.0 & Move::KIND_MASK;
+        let promotion = (kind >> 3) * (0b1000 | (kind & 0b11));
+        Self((mve.0 & !Move::KIND_MASK) | promotion)
     }
 }
 
@@ -176,7 +265,6 @@ impl fmt::Display for MoveList {
         let mut moves = self.0.iter();
         if let Some(first) = moves.next() {
             write!(f, "{}", first)?;
-
             for mve in moves {
                 write!(f, " {}", mve)?;
             }
@@ -195,9 +283,20 @@ fn parse_square(file: u8, rank: u8) -> Result<Square> {
     if !(b'a'..=b'h').contains(&file) || !(b'1'..=b'8').contains(&rank) {
         bail!("invalid square");
     }
-
     Ok(Square::new((rank - b'1') as u32 * 8 + (file - b'a') as u32))
 }
+
+const _: () = {
+    assert!(MoveKind::PromoteKnight as u8 & 0b11 == PromotionPiece::Knight as u8);
+    assert!(MoveKind::PromoteBishop as u8 & 0b11 == PromotionPiece::Bishop as u8);
+    assert!(MoveKind::PromoteRook as u8 & 0b11 == PromotionPiece::Rook as u8);
+    assert!(MoveKind::PromoteQueen as u8 & 0b11 == PromotionPiece::Queen as u8);
+
+    assert!(MoveKind::CapturePromoteKnight as u8 & 0b11 == PromotionPiece::Knight as u8);
+    assert!(MoveKind::CapturePromoteBishop as u8 & 0b11 == PromotionPiece::Bishop as u8);
+    assert!(MoveKind::CapturePromoteRook as u8 & 0b11 == PromotionPiece::Rook as u8);
+    assert!(MoveKind::CapturePromoteQueen as u8 & 0b11 == PromotionPiece::Queen as u8);
+};
 
 #[cfg(test)]
 mod tests {
@@ -205,26 +304,13 @@ mod tests {
 
     use crate::square;
 
-    use super::{Move, PromotionPiece};
+    use super::{Move, MoveKind, UciMove};
 
     #[test]
-    fn parses_valid_moves() {
-        assert_eq!(
-            Move::from_str("a2a4").unwrap(),
-            Move::new(square!(a2), square!(a4), None)
-        );
-        assert_eq!(
-            Move::from_str("h7h5").unwrap(),
-            Move::new(square!(h7), square!(h5), None)
-        );
-        assert_eq!(
-            Move::from_str("a1h8").unwrap(),
-            Move::new(square!(a1), square!(h8), None)
-        );
-        assert_eq!(
-            Move::from_str("a7a8n").unwrap(),
-            Move::new(square!(a7), square!(a8), Some(PromotionPiece::Knight))
-        );
+    fn parses_and_roundtrips_moves() {
+        for mve in ["a2a4", "h7h5", "a1h8", "a7a8q", "b2a1r", "c7c8b", "h2h1n"] {
+            assert_eq!(UciMove::from_str(mve).unwrap().to_string(), mve);
+        }
     }
 
     #[test]
@@ -232,14 +318,31 @@ mod tests {
         for mve in [
             "", "a2a", "a2a44q", "a7a8k", "a7a8Q", "i2a4", "a0a4", "a2i4", "a2a9", "A2A4",
         ] {
-            assert!(Move::from_str(mve).is_err(), "{mve} should be invalid");
+            assert!(UciMove::from_str(mve).is_err(), "{mve} should be invalid");
         }
     }
 
     #[test]
-    fn roundtrips_through_string() {
-        for mve in ["a2a4", "h7h5", "a1h8", "a7a8q", "b2a1r", "c7c8b", "h2h1n"] {
-            assert_eq!(Move::from_str(mve).unwrap().to_string(), mve);
+    fn every_internal_move_kind_roundtrips_through_uci() {
+        for (kind, expected) in [
+            (MoveKind::Quiet, "a2a3"),
+            (MoveKind::DoublePush, "a2a3"),
+            (MoveKind::CastleKing, "a2a3"),
+            (MoveKind::CastleQueen, "a2a3"),
+            (MoveKind::Capture, "a2a3"),
+            (MoveKind::EnPassant, "a2a3"),
+            (MoveKind::PromoteKnight, "a2a3n"),
+            (MoveKind::PromoteBishop, "a2a3b"),
+            (MoveKind::PromoteRook, "a2a3r"),
+            (MoveKind::PromoteQueen, "a2a3q"),
+            (MoveKind::CapturePromoteKnight, "a2a3n"),
+            (MoveKind::CapturePromoteBishop, "a2a3b"),
+            (MoveKind::CapturePromoteRook, "a2a3r"),
+            (MoveKind::CapturePromoteQueen, "a2a3q"),
+        ] {
+            let uci = <UciMove as From<Move>>::from(Move::new(square!(a2), square!(a3), kind));
+            assert_eq!(uci.to_string(), expected);
+            assert_eq!(UciMove::from_str(expected).unwrap(), uci);
         }
     }
 }

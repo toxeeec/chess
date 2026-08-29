@@ -1,4 +1,4 @@
-use crate::{game::Game, moves::Move};
+use crate::{game::Game, moves::UciMove};
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Perft {
@@ -7,7 +7,7 @@ pub struct Perft {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct GameReplay {
-    games: Vec<Vec<Move>>,
+    games: Vec<Vec<UciMove>>,
 }
 
 impl GameReplay {

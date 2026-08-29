@@ -2,7 +2,7 @@ use crate::{
     attacks::PinRays,
     bitboard::{Bitboard, Direction},
     board::Board,
-    moves::{Move, MoveList},
+    moves::MoveList,
     square::Square,
     state::Color,
 };
@@ -10,6 +10,7 @@ use crate::{
 pub(super) fn add_knight_moves<const COLOR: Color>(
     board: &Board,
     blockers: Bitboard,
+    enemies: Bitboard,
     evasion_mask: Bitboard,
     pin_rays: PinRays,
     list: &mut MoveList,
@@ -18,7 +19,7 @@ pub(super) fn add_knight_moves<const COLOR: Color>(
 
     for from in knights {
         let moves = KNIGHT_ATTACKS[from] & !blockers & evasion_mask;
-        list.extend(moves.map(|to| Move::new(from, to, None)));
+        board.add_normal_moves(list, from, moves, enemies);
     }
 }
 
@@ -58,10 +59,13 @@ mod tests {
 
     fn knight_moves(board: Board, pin_rays: PinRays) -> MoveList {
         let mut moves = MoveList::default();
+        let blockers = board.occupancy::<{ Color::White }>();
+        let enemies = board.occupancy::<{ Color::Black }>();
 
         add_knight_moves::<{ Color::White }>(
             &board,
-            board.occupancy::<{ Color::White }>(),
+            blockers,
+            enemies,
             Bitboard::FULL,
             pin_rays,
             &mut moves,

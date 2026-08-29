@@ -1,6 +1,6 @@
 use crate::{
     board::Board,
-    game::{Game, apply_move, generate_legal_moves, undo_move},
+    game::{Game, generate_legal_moves, make_move, unmake_move},
     moves::MoveList,
     state::State,
 };
@@ -23,9 +23,10 @@ impl Game {
         self.moves
             .iter()
             .map(|mve| {
-                let undo = apply_move(&mut board, &mut state, mve);
+                // SAFETY: `mve` was generated for the copied board and state.
+                let undo = unsafe { make_move(&mut board, &mut state, mve) };
                 let nodes = perft(&mut board, &mut state, depth - 1, move_lists.as_mut_slice());
-                undo_move(&mut board, &mut state, mve, undo);
+                unmake_move(&mut board, &mut state, mve, undo);
                 nodes
             })
             .sum()
@@ -45,9 +46,10 @@ fn perft(board: &mut Board, state: &mut State, depth: u32, move_lists: &mut [Mov
     moves
         .iter()
         .map(|mve| {
-            let undo = apply_move(board, state, mve);
+            // SAFETY: `moves` was generated for the current board and state above.
+            let undo = unsafe { make_move(board, state, mve) };
             let nodes = perft(board, state, depth - 1, child_move_lists);
-            undo_move(board, state, mve, undo);
+            unmake_move(board, state, mve, undo);
             nodes
         })
         .sum()

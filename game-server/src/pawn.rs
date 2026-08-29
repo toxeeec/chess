@@ -3,7 +3,7 @@ use crate::{
     bitboard::Bitboard,
     board::Board,
     magics::{bishop_attacks, rook_attacks},
-    moves::{Move, MoveList, PromotionPiece},
+    moves::{Move, MoveKind, MoveList},
     square::Square,
     state::{Color, EnPassant, OPPONENT},
 };
@@ -49,24 +49,17 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
 
     let quiet_promotions = pushes & promotion_rank & evasion_mask;
 
+    list.extend(single_pushes.map(|to| Move::new(to.backward::<COLOR, 1>(), to, MoveKind::Quiet)));
     list.extend(
-        single_pushes
-            .map(|to| Move::new(to.backward::<COLOR, 1>(), to, None))
-            .chain(double_pushes.map(|to| Move::new(to.backward::<COLOR, 2>(), to, None)))
-            .chain(west_captures.map(|to| Move::new(to.backward_east::<COLOR>(), to, None)))
-            .chain(east_captures.map(|to| Move::new(to.backward_west::<COLOR>(), to, None))),
+        double_pushes.map(|to| Move::new(to.backward::<COLOR, 2>(), to, MoveKind::DoublePush)),
     );
-    list.extend(
-        quiet_promotions
-            .map(|to| (to.backward::<COLOR, 1>(), to))
-            .chain(
-                west_capture_promotions
-                    .map(|to| (to.backward_east::<COLOR>(), to))
-                    .chain(east_capture_promotions.map(|to| (to.backward_west::<COLOR>(), to))),
-            )
-            .flat_map(|(from, to)| {
-                PromotionPiece::ALL.map(|piece| Move::new(from, to, Some(piece)))
-            }),
+
+    add_pawn_captures::<COLOR>(west_captures, east_captures, list);
+    add_pawn_promotions::<COLOR>(
+        quiet_promotions,
+        west_capture_promotions,
+        east_capture_promotions,
+        list,
     );
 
     if let Some(to) = en_passant.target() {
@@ -81,16 +74,53 @@ pub(super) fn add_pawn_moves<const COLOR: Color>(
             if !west.empty() {
                 let from = to.backward_east::<COLOR>();
                 if en_passant_is_legal::<COLOR>(board, occupied, from, to, captured) {
-                    list.push(Move::new(from, to, None));
+                    list.push(Move::new(from, to, MoveKind::EnPassant));
                 }
             }
             if !east.empty() {
                 let from = to.backward_west::<COLOR>();
                 if en_passant_is_legal::<COLOR>(board, occupied, from, to, captured) {
-                    list.push(Move::new(from, to, None));
+                    list.push(Move::new(from, to, MoveKind::EnPassant));
                 }
             }
         }
+    }
+}
+
+fn add_pawn_captures<const COLOR: Color>(
+    west_captures: Bitboard,
+    east_captures: Bitboard,
+    list: &mut MoveList,
+) {
+    list.extend(west_captures.map(|to| {
+        let from = to.backward_east::<COLOR>();
+        Move::new(from, to, MoveKind::Capture)
+    }));
+    list.extend(east_captures.map(|to| {
+        let from = to.backward_west::<COLOR>();
+        Move::new(from, to, MoveKind::Capture)
+    }));
+}
+
+fn add_pawn_promotions<const COLOR: Color>(
+    quiet_promotions: Bitboard,
+    west_capture_promotions: Bitboard,
+    east_capture_promotions: Bitboard,
+    list: &mut MoveList,
+) {
+    for to in quiet_promotions {
+        let from = to.backward::<COLOR, 1>();
+        list.extend(MoveKind::QUIET_PROMOTIONS.map(|kind| Move::new(from, to, kind)));
+    }
+
+    for to in west_capture_promotions {
+        let from = to.backward_east::<COLOR>();
+        list.extend(MoveKind::CAPTURE_PROMOTIONS.map(|kind| Move::new(from, to, kind)));
+    }
+
+    for to in east_capture_promotions {
+        let from = to.backward_west::<COLOR>();
+        list.extend(MoveKind::CAPTURE_PROMOTIONS.map(|kind| Move::new(from, to, kind)));
     }
 }
 

@@ -48,10 +48,13 @@ impl PinRays {
     }
 }
 
-pub(super) fn king_threats<const ENEMY: Color>(board: &Board, occupied: Bitboard) -> KingThreats {
+pub(super) fn king_threats<const ENEMY: Color>(
+    board: &Board,
+    occupied: Bitboard,
+    blockers: Bitboard,
+) -> KingThreats {
     let king = board.king::<{ OPPONENT::<ENEMY> }>();
     let king_square = board.king_square::<{ OPPONENT::<ENEMY> }>();
-    let blockers = board.occupancy::<{ OPPONENT::<ENEMY> }>();
     let occupied = occupied & !king;
 
     let diagonal_sliders = board.bishops::<ENEMY>() | board.queens::<ENEMY>();
@@ -210,9 +213,11 @@ mod tests {
             . . . . . . . .
             . b . . . . . .
         );
+        let occupied = board.occupied();
+        let blockers = board.occupancy::<{ Color::White }>();
 
         assert_eq!(
-            king_threats::<{ Color::Black }>(&board, board.occupied()).attackers,
+            king_threats::<{ Color::Black }>(&board, occupied, blockers).attackers,
             Bitboard::from(squares![b1, a4, c5, d5, e8, h7])
         );
     }
@@ -229,8 +234,10 @@ mod tests {
             . . . . . . . .
             . . . . . . . .
         );
+        let occupied = blocked.occupied();
+        let blockers = blocked.occupancy::<{ Color::White }>();
         assert_eq!(
-            king_threats::<{ Color::Black }>(&blocked, blocked.occupied()).attackers,
+            king_threats::<{ Color::Black }>(&blocked, occupied, blockers).attackers,
             Bitboard::EMPTY
         );
 
@@ -244,8 +251,10 @@ mod tests {
             . . . . . . . .
             . . . . . . . .
         );
+        let occupied = double.occupied();
+        let blockers = double.occupancy::<{ Color::White }>();
         assert_eq!(
-            king_threats::<{ Color::Black }>(&double, double.occupied()).attackers,
+            king_threats::<{ Color::Black }>(&double, occupied, blockers).attackers,
             Bitboard::from(squares![e8, c5])
         );
 
@@ -259,8 +268,10 @@ mod tests {
             . . . . . . . .
             . . . . . . . .
         );
+        let occupied = quiet.occupied();
+        let blockers = quiet.occupancy::<{ Color::White }>();
         assert_eq!(
-            king_threats::<{ Color::Black }>(&quiet, quiet.occupied()).attackers,
+            king_threats::<{ Color::Black }>(&quiet, occupied, blockers).attackers,
             Bitboard::EMPTY
         );
     }
@@ -277,7 +288,9 @@ mod tests {
             . . . B R . . .
             . . . . K . . .
         );
-        let threats = king_threats::<{ Color::Black }>(&board, board.occupied());
+        let occupied = board.occupied();
+        let blockers = board.occupancy::<{ Color::White }>();
+        let threats = king_threats::<{ Color::Black }>(&board, occupied, blockers);
 
         assert_eq!(
             threats.pin_rays.diagonal,
@@ -298,7 +311,9 @@ mod tests {
             . . . . R . . .
             . . . . K . . .
         );
-        let threats = king_threats::<{ Color::Black }>(&double_blocked, double_blocked.occupied());
+        let occupied = double_blocked.occupied();
+        let blockers = double_blocked.occupancy::<{ Color::White }>();
+        let threats = king_threats::<{ Color::Black }>(&double_blocked, occupied, blockers);
 
         assert_eq!(threats.pin_rays.orthogonal, Bitboard::EMPTY);
     }
@@ -315,7 +330,9 @@ mod tests {
             . . . . . . . .
             . . . . . . . .
         );
-        let forbidden = king_threats::<{ Color::Black }>(&board, board.occupied()).forbidden;
+        let occupied = board.occupied();
+        let blockers = board.occupancy::<{ Color::White }>();
+        let forbidden = king_threats::<{ Color::Black }>(&board, occupied, blockers).forbidden;
 
         for square in squares![c4, e4, e2, e5, d8, g7] {
             assert!(forbidden.contains(square), "{square:?} should be forbidden");

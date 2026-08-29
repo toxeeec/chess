@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::{moves::Move, state::Color};
+use crate::{moves::UciMove, state::Color};
 
 use super::state::{DrawReason, GameLifecycle, GameOutcome, GameState, MakeMoveError, WinReason};
 
@@ -251,7 +251,7 @@ impl From<MakeMoveError> for ErrorMessage {
 }
 
 impl MoveMessage {
-    pub(super) fn new(mve: Move, state: &GameState, now: i64) -> Self {
+    pub(super) fn new(mve: UciMove, state: &GameState, now: i64) -> Self {
         Self {
             revision: state.revision,
             mve: mve.to_string(),

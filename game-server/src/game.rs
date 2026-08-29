@@ -3,11 +3,11 @@ use anyhow::{Context, Result};
 use crate::{
     attacks::{KingThreats, evasion_mask, king_threats},
     bishop::add_bishop_moves,
-    board::{Board, Piece},
+    board::Board,
     castling::CastlingRights,
     king::add_king_moves,
     knight::add_knight_moves,
-    moves::{Move, MoveList},
+    moves::{Move, MoveKind, MoveList, UciMove},
     pawn::add_pawn_moves,
     queen::add_queen_moves,
     rook::add_rook_moves,
@@ -80,17 +80,15 @@ impl Game {
     pub(super) fn make_move(
         &mut self,
         color: Color,
-        mve: Move,
+        mve: UciMove,
     ) -> Result<Option<GameResult>, MakeMoveError> {
         if color != self.state.turn {
             return Err(MakeMoveError::NotYourTurn);
         }
 
-        if !self.moves.contains(mve) {
-            return Err(MakeMoveError::IllegalMove);
-        }
-
-        apply_move(&mut self.board, &mut self.state, mve);
+        let mve = self.moves.resolve(mve).ok_or(MakeMoveError::IllegalMove)?;
+        // SAFETY: `resolve` returns a move generated for the current board and state.
+        unsafe { make_move(&mut self.board, &mut self.state, mve) };
         Ok(generate_legal_moves(
             &self.board,
             self.state,
@@ -124,7 +122,7 @@ fn generate_legal_moves_for<const COLOR: Color>(
         attackers,
         forbidden,
         pin_rays,
-    } = king_threats::<{ OPPONENT::<COLOR> }>(board, occupied);
+    } = king_threats::<{ OPPONENT::<COLOR> }>(board, occupied, blockers);
     let evasion_mask = evasion_mask(board.king_square::<COLOR>(), attackers);
 
     if !evasion_mask.empty() {
@@ -137,16 +135,40 @@ fn generate_legal_moves_for<const COLOR: Color>(
             state.en_passant,
             moves,
         );
-        add_knight_moves::<COLOR>(board, blockers, evasion_mask, pin_rays, moves);
-        add_bishop_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
-        add_rook_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
-        add_queen_moves::<COLOR>(board, occupied, blockers, evasion_mask, pin_rays, moves);
+        add_knight_moves::<COLOR>(board, blockers, enemy, evasion_mask, pin_rays, moves);
+        add_bishop_moves::<COLOR>(
+            board,
+            occupied,
+            blockers,
+            enemy,
+            evasion_mask,
+            pin_rays,
+            moves,
+        );
+        add_rook_moves::<COLOR>(
+            board,
+            occupied,
+            blockers,
+            enemy,
+            evasion_mask,
+            pin_rays,
+            moves,
+        );
+        add_queen_moves::<COLOR>(
+            board,
+            occupied,
+            blockers,
+            enemy,
+            evasion_mask,
+            pin_rays,
+            moves,
+        );
     }
 
     add_king_moves::<COLOR>(
         board,
         occupied,
-        blockers,
+        enemy,
         attackers,
         forbidden,
         state.castling_rights,
@@ -164,38 +186,38 @@ fn generate_legal_moves_for<const COLOR: Color>(
     }
 }
 
-pub(super) fn apply_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
+/// # Safety
+///
+/// `mve` must have been generated for the current board and state.
+pub(super) unsafe fn make_move(board: &mut Board, state: &mut State, mve: Move) -> Undo {
     let previous_state = *state;
-    let board_undo = board.make_move(previous_state.turn, mve, previous_state.en_passant.target());
+    // SAFETY: Guaranteed by `make_move`'s safety contract.
+    let _board_undo = unsafe { board.make_move(previous_state.turn, mve) };
+    let from = mve.from();
+    let to = mve.to();
 
-    state.castling_rights.update(mve.from, mve.to);
-    state.en_passant =
-        if board_undo.moved == Piece::Pawn && mve.from.rank().abs_diff(mve.to.rank()) == 2 {
-            EnPassant::new(match previous_state.turn {
-                Color::White => mve.to.backward::<{ Color::White }, 1>(),
-                Color::Black => mve.to.backward::<{ Color::Black }, 1>(),
-            })
-        } else {
-            EnPassant::NONE
-        };
+    state.castling_rights.update(from, to);
+    state.en_passant = if mve.kind() == MoveKind::DoublePush {
+        EnPassant::new(match previous_state.turn {
+            Color::White => to.backward::<{ Color::White }, 1>(),
+            Color::Black => to.backward::<{ Color::Black }, 1>(),
+        })
+    } else {
+        EnPassant::NONE
+    };
     state.turn = previous_state.turn.opponent();
 
     Undo {
         #[cfg(any(test, feature = "benchmark"))]
         state: previous_state,
         #[cfg(any(test, feature = "benchmark"))]
-        board: board_undo,
+        board: _board_undo,
     }
 }
 
 #[cfg(any(test, feature = "benchmark"))]
-pub(super) fn undo_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
-    board.unmake_move(
-        undo.state.turn,
-        mve,
-        undo.state.en_passant.target(),
-        undo.board,
-    );
+pub(super) fn unmake_move(board: &mut Board, state: &mut State, mve: Move, undo: Undo) {
+    board.unmake_move(undo.state.turn, mve, undo.board);
     *state = undo.state;
 }
 
@@ -204,12 +226,12 @@ mod tests {
     use crate::{square, test_utils::board};
 
     use super::{
-        CastlingRights, Color, EnPassant, Game, GameResult, MoveList, State, apply_move,
-        generate_legal_moves, undo_move,
+        CastlingRights, Color, EnPassant, Game, GameResult, MoveKind, MoveList, State,
+        generate_legal_moves, make_move, unmake_move,
     };
 
     fn has_move(game: &Game, mve: &str) -> bool {
-        game.moves.contains(mve.parse().unwrap())
+        game.moves.resolve(mve.parse().unwrap()).is_some()
     }
 
     fn assert_perft(fen: &str, expected: &[u64]) {
@@ -222,33 +244,86 @@ mod tests {
 
     #[test]
     fn make_unmake_restores_every_move_type() {
-        for (fen, mve) in [
+        for (fen, mve, kind) in [
             (
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 "e2e4",
+                MoveKind::DoublePush,
             ),
-            ("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5"),
-            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e5d6"),
-            ("4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1", "e4d3"),
-            ("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1"),
-            ("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1c1"),
-            ("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8g8"),
-            ("r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8c8"),
-            ("7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8n"),
-            ("1r5k/P7/8/8/8/8/8/K7 w - - 0 1", "a7b8q"),
-            ("7k/8/8/8/8/8/p7/7K b - - 0 1", "a2a1r"),
-            ("7k/8/8/8/8/8/1p6/B6K b - - 0 1", "b2a1b"),
-            ("r3k3/8/8/8/8/8/8/R3K3 b Qq - 0 1", "a8a1"),
-            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e1e2"),
+            (
+                "4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1",
+                "e4d5",
+                MoveKind::Capture,
+            ),
+            (
+                "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+                "e5d6",
+                MoveKind::EnPassant,
+            ),
+            (
+                "4k3/8/8/8/3Pp3/8/8/4K3 b - d3 0 1",
+                "e4d3",
+                MoveKind::EnPassant,
+            ),
+            (
+                "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+                "e1g1",
+                MoveKind::CastleKing,
+            ),
+            (
+                "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+                "e1c1",
+                MoveKind::CastleQueen,
+            ),
+            (
+                "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1",
+                "e8g8",
+                MoveKind::CastleKing,
+            ),
+            (
+                "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1",
+                "e8c8",
+                MoveKind::CastleQueen,
+            ),
+            (
+                "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+                "a7a8n",
+                MoveKind::PromoteKnight,
+            ),
+            (
+                "1r5k/P7/8/8/8/8/8/K7 w - - 0 1",
+                "a7b8q",
+                MoveKind::CapturePromoteQueen,
+            ),
+            (
+                "7k/8/8/8/8/8/p7/7K b - - 0 1",
+                "a2a1r",
+                MoveKind::PromoteRook,
+            ),
+            (
+                "7k/8/8/8/8/8/1p6/B6K b - - 0 1",
+                "b2a1b",
+                MoveKind::CapturePromoteBishop,
+            ),
+            (
+                "r3k3/8/8/8/8/8/8/R3K3 b Qq - 0 1",
+                "a8a1",
+                MoveKind::Capture,
+            ),
+            ("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e1e2", MoveKind::Quiet),
         ] {
             let game = Game::from_fen(fen).unwrap();
-            let mve = mve.parse().unwrap();
-            assert!(game.moves.contains(mve), "{mve} must be legal in {fen}");
+            let input = mve.parse().unwrap();
+            let resolved = game.moves.resolve(input);
+            assert!(resolved.is_some(), "{input} must be legal in {fen}");
+            let mve = resolved.unwrap();
+            assert_eq!(mve.kind(), kind);
 
             let mut board = game.board;
             let mut state = game.state;
-            let undo = apply_move(&mut board, &mut state, mve);
-            undo_move(&mut board, &mut state, mve, undo);
+            // SAFETY: `mve` was resolved from the moves generated for this board and state.
+            let undo = unsafe { make_move(&mut board, &mut state, mve) };
+            unmake_move(&mut board, &mut state, mve, undo);
 
             assert_eq!(format!("{} {}", board.fen(), state.fen()), game.fen());
             let mut restored_moves = MoveList::default();
@@ -538,7 +613,7 @@ mod tests {
         );
 
         assert!(!game.moves.is_empty());
-        assert!(game.moves.iter().all(|mve| mve.from == square!(e1)));
+        assert!(game.moves.iter().all(|mve| mve.from() == square!(e1)));
     }
 
     #[test]

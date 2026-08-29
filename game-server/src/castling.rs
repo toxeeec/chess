@@ -3,7 +3,7 @@ use anyhow::{Result, bail};
 use crate::{
     bitboard::Bitboard,
     board::Board,
-    moves::{Move, MoveList},
+    moves::{Move, MoveKind, MoveList},
     square,
     square::Square,
     squares,
@@ -194,11 +194,12 @@ pub(super) fn add_castling_moves<const COLOR: Color>(
         & rights.contains(config.king_right)
         & (occupied & config.king_empty).empty()
         & (forbidden & config.king_safe).empty();
-    let castles = Bitboard::new(
-        ((queen_side as u64) << usize::from(config.queen_to))
-            | ((king_side as u64) << usize::from(config.king_to)),
-    );
-    list.extend(castles.map(|to| Move::new(from, to, None)));
+    if queen_side {
+        list.push(Move::new(from, config.queen_to, MoveKind::CastleQueen));
+    }
+    if king_side {
+        list.push(Move::new(from, config.king_to, MoveKind::CastleKing));
+    }
 }
 
 #[cfg(test)]
@@ -211,7 +212,7 @@ mod tests {
     };
 
     fn has_move(game: &Game, mve: &str) -> bool {
-        game.moves.contains(mve.parse().unwrap())
+        game.moves.resolve(mve.parse().unwrap()).is_some()
     }
 
     #[test]
