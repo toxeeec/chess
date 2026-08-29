@@ -1,14 +1,23 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync, writeFileSync } from "node:fs"
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 
-type ModeConfiguration = { cargoFlags: string[]; profile: string }
+type ModeConfiguration = {
+	cargoFlags: string[]
+	optimize: boolean
+	profile: string
+}
 
 const modeConfiguration: Record<string, ModeConfiguration | undefined> = {
-	dev: { cargoFlags: [], profile: "debug" },
+	dev: {
+		cargoFlags: [],
+		optimize: false,
+		profile: "debug",
+	},
 	benchmark: {
-		cargoFlags: ["--profile", "benchmark", "--features", "benchmark"],
-		profile: "benchmark",
+		cargoFlags: ["--profile", "benchmark-wasm", "--features", "benchmark"],
+		optimize: true,
+		profile: "benchmark-wasm",
 	},
 }
 
@@ -17,20 +26,20 @@ const { values } = parseArgs({
 	strict: true,
 })
 const mode = values.mode
-if (mode === undefined) {
+if (!mode) {
 	console.error("Build mode is required")
 	process.exit(1)
 }
 
 const configuration = modeConfiguration[mode]
-if (configuration === undefined || !Object.hasOwn(modeConfiguration, mode)) {
+if (!configuration || !Object.hasOwn(modeConfiguration, mode)) {
 	console.error(
 		`Build mode must be one of: ${Object.keys(modeConfiguration).join(", ")}; received: ${mode}`,
 	)
 	process.exit(1)
 }
 
-const { cargoFlags, profile } = configuration
+const { cargoFlags, optimize, profile } = configuration
 const outputDirectory = `game-server/build/${mode}`
 
 execFileSync(
@@ -62,7 +71,18 @@ execFileSync(
 	],
 	{ stdio: "inherit" },
 )
+if (optimize) optimizeWasm(`${outputDirectory}/game_server_bg.wasm`)
 patchWasmImport(`${outputDirectory}/game_server.js`)
+
+function optimizeWasm(file: string) {
+	const optimizedFile = `${file}.optimized`
+	try {
+		execFileSync("wasm-opt", [file, "-O3", "-o", optimizedFile], { stdio: "inherit" })
+		renameSync(optimizedFile, file)
+	} finally {
+		rmSync(optimizedFile, { force: true })
+	}
+}
 
 function patchWasmImport(file: string) {
 	const importSource = 'import source wasmModule from "./game_server_bg.wasm"'

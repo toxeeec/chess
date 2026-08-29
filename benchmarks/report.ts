@@ -129,8 +129,14 @@ function runNativeBenchmark(
 				benchmarkName,
 				"--features",
 				"benchmark",
+				"--profile",
+				"benchmark-native",
 			],
-			{ ...process.env, CRITERION_HOME: outputDirectory },
+			{
+				...process.env,
+				CRITERION_HOME: outputDirectory,
+				RUSTFLAGS: `${process.env.RUSTFLAGS ?? ""} -Ctarget-cpu=native`.trim(),
+			},
 		)
 
 		const resultDirectory = findCriterionResult(outputDirectory, benchmarkId)

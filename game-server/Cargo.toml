@@ -9,8 +9,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 benchmark = []
 
-[profile.benchmark]
+[profile.benchmark-wasm]
 inherits = "release"
+lto = "fat"
+
+[profile.benchmark-native]
+inherits = "release"
+lto = "fat"
 
 [dependencies]
 anyhow = "1.0.102"

@@ -22,7 +22,7 @@ if (benchmark === "games" && args.length === 0) {
 	runPerftSuite(target)
 } else if (benchmark === "perft" && args.length === 2) {
 	const [position, depth] = args
-	if (!position || depth === undefined) exitWithUsage()
+	if (!position || !depth) exitWithUsage()
 	runPerftBenchmark(target, position, depth)
 } else {
 	exitWithUsage()

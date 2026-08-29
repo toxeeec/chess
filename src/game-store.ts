@@ -209,7 +209,7 @@ function nextBoard(board: readonly (Piece | undefined)[], move: Move) {
 	const isEnPassant =
 		(movingPiece === "P" || movingPiece === "p") &&
 		Square.file(move.from) !== Square.file(move.to) &&
-		board[move.to] === undefined
+		!board[move.to]
 	if (isEnPassant) {
 		const captured = move.from - Square.file(move.from) + Square.file(move.to)
 		nextBoard[captured] = undefined
