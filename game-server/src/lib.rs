@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(
     adt_const_params,
+    const_default,
     const_trait_impl,
     const_convert,
     const_index,

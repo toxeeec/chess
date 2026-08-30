@@ -1,5 +1,7 @@
 use std::{
     fmt::{self, Write},
+    mem::MaybeUninit,
+    slice,
     str::FromStr,
 };
 
@@ -43,9 +45,12 @@ pub(super) struct Move(u16);
 #[repr(transparent)]
 pub(super) struct UciMove(u16);
 
-pub(crate) struct MoveList(Vec<Move>);
-
 const MAX_LEGAL_MOVES: usize = 218;
+
+pub(crate) struct MoveList {
+    moves: [MaybeUninit<Move>; MAX_LEGAL_MOVES],
+    len: usize,
+}
 
 impl MoveKind {
     pub(super) const QUIET_PROMOTIONS: [Self; 4] = [
@@ -127,39 +132,54 @@ impl Move {
 }
 
 impl MoveList {
-    pub(super) const EMPTY: &'static Self = &Self(Vec::new());
+    pub(super) const EMPTY: &'static Self = &Self::default();
 
     pub(crate) fn clear(&mut self) {
-        self.0.clear();
+        self.len = 0;
     }
 
     pub(crate) fn resolve(&self, input: UciMove) -> Option<Move> {
-        self.0
+        self.as_slice()
             .iter()
             .copied()
             .find(|mve| Into::<UciMove>::into(*mve) == input)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.len == 0
     }
 
     pub(crate) fn extend<T: IntoIterator<Item = Move>>(&mut self, iter: T) {
-        self.0.extend(iter);
+        let mut len = self.len;
+        for mve in iter {
+            debug_assert!(len < MAX_LEGAL_MOVES);
+            // SAFETY: A legal chess position has at most `MAX_LEGAL_MOVES` legal moves.
+            unsafe { self.moves.get_unchecked_mut(len) }.write(mve);
+            len += 1;
+        }
+        self.len = len;
     }
 
     pub(crate) fn push(&mut self, mve: Move) {
-        self.0.push(mve);
+        debug_assert!(self.len < MAX_LEGAL_MOVES);
+        // SAFETY: A legal chess position has at most `MAX_LEGAL_MOVES` legal moves.
+        unsafe { self.moves.get_unchecked_mut(self.len) }.write(mve);
+        self.len += 1;
     }
 
     #[cfg(any(test, feature = "benchmark"))]
     pub(crate) fn len(&self) -> usize {
-        self.0.len()
+        self.len
     }
 
     #[cfg(any(test, feature = "benchmark"))]
     pub(crate) fn iter(&self) -> impl Iterator<Item = Move> + '_ {
-        self.0.iter().copied()
+        self.as_slice().iter().copied()
+    }
+
+    fn as_slice(&self) -> &[Move] {
+        // SAFETY: `push` and `extend` initialize every element before publishing its length.
+        unsafe { slice::from_raw_parts(self.moves.as_ptr().cast(), self.len) }
     }
 }
 
@@ -262,7 +282,7 @@ impl From<Move> for UciMove {
 
 impl fmt::Display for MoveList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut moves = self.0.iter();
+        let mut moves = self.as_slice().iter();
         if let Some(first) = moves.next() {
             write!(f, "{}", first)?;
             for mve in moves {
@@ -273,9 +293,12 @@ impl fmt::Display for MoveList {
     }
 }
 
-impl Default for MoveList {
+const impl Default for MoveList {
     fn default() -> Self {
-        Self(Vec::with_capacity(MAX_LEGAL_MOVES))
+        Self {
+            moves: [MaybeUninit::uninit(); MAX_LEGAL_MOVES],
+            len: 0,
+        }
     }
 }
 
